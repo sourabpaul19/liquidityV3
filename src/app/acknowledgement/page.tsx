@@ -1,6 +1,5 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import styles from "./acknowledgement.module.scss";
 import Image from 'next/image';
 import user from '../../../public/images/3177440.png';
