@@ -38,7 +38,7 @@ export default function Acknowledgement() {
                 <div className="grid grid-cols-1 mt-7 gap-4">
                     <form onSubmit={handleVerify} className="space-y-4">
                         <button type='submit' className='bg-primary px-3 py-3 rounded-lg w-full text-white'>I Understand</button>
-                        <button type='submit' className='bg-black px-3 py-3 rounded-lg w-full text-white'>Yes, Don't Show Again</button>
+                        <button type='submit' className='bg-black px-3 py-3 rounded-lg w-full text-white'>Yes, Don&apos;t Show Again</button>
                         <button type='submit' className='bg-black px-3 py-3 rounded-lg w-full text-white'>No, Cancel</button>
                     </form>
                 </div>
