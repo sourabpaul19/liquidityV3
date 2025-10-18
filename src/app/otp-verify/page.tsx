@@ -47,7 +47,7 @@ export default function OTPVerify() {
         </div>
       </div>
             <div className={`${styles.otpFooter}`}>
-                <p className="text-center">Didn't received a code? Resend</p>
+                <p className="text-center">Didn&apos;t received a code? Resend</p>
             </div>
     </section>
     </>    
