@@ -1,7 +1,56 @@
 .catMenu {
-    position: sticky;
+    position: fixed;
     z-index: 9;
-    top: 0;
+    top: 56px;
+}
+.outletBanner {
+    display: block;
+    aspect-ratio: 16/10;
+    position: relative;
+}
+.outletName {
+    padding: 10px 24px;
+    text-align: center;
+    color: #000;
+    font-size: 20px;
+    font-weight: 600;
+}
+.textarea {
+    background: #f6f6f7;
+    text-align: left;
+    padding: 12px 20px;
+    height: 54px;
+    width: 100%;
+    color: #000;
+
+    &:focus {
+        outline: none;
+    }
+}
+.outletAds {
+    display: flex;
+    background: var(--color-primary);
+    padding: 10px;
+    border-radius: 10px;
+    width: calc(100% - 32px);
+    margin: 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+
+    .signInBtn {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: #fff;
+        font-weight: 600;
+    }
+    h5 {
+        color: #fff;
+        margin-bottom: 6px;
+        font-weight: 600;
+        font-size: 16px;
+    }
 }
 .itemCard {
     display: flex;
@@ -57,8 +106,8 @@
 }
 .mixerButton {
     background: #E5E5E5;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     padding: 0;
@@ -68,7 +117,7 @@
 .bottomButton {
     position: sticky;
     bottom: 0;
-    padding: 16px 16px 0;
+    padding: 16px;
 
     button {
         display: flex;

@@ -25,22 +25,11 @@ import Modal from '@/components/common/Modal/Modal';
 
 export default function NewAccount() {
 
-    const [showModal, setShowModal] = useState(false);
-
-    useEffect(() => {
-        // ✅ Show modal only once per browser session
-        const modalShown = sessionStorage.getItem("homeModalShown");
-        if (!modalShown) {
-            setShowModal(true);
-            sessionStorage.setItem("homeModalShown", "true");
-        }
-    }, []);
-
     const router = useRouter();
 
     const handleVerify = (e: React.FormEvent) => {
         e.preventDefault();
-        router.push("/bars");
+        router.push("/outlet");
     };
 
     const slides = [
@@ -158,7 +147,7 @@ export default function NewAccount() {
     <>
     <Header buttonType="menu" />
     <section className='pageWrapper hasHeader hasFooter'>
-        <div className='py-4'>
+        <div className='pageContainer py-4'>
         <Swiper
           modules={[Thumbs, Navigation, Autoplay]}
           pagination={{ clickable: true }}
@@ -261,17 +250,6 @@ export default function NewAccount() {
                 ))}
             </div>
         </div>
-         {/* ✅ Modal shown only on first load */}
-        <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
-            <div className={styles.eventBanner2}>
-                <Image src={eventbg} alt='' fill className="" ></Image>
-            </div>
-            <form className={styles.eventForm} onSubmit={handleVerify}>
-                <span><Image src={date} alt='' fill className="" ></Image></span>
-                <input type='text' placeholder='Enter event code here'></input>
-                <button type="submit"><Image src={submit} alt='' fill className="" ></Image></button>
-            </form>
-        </Modal>
         </div>
     </section>
     <BottomNavigation />

@@ -10,6 +10,7 @@ import Button from "@/components/common/Button/Button";
 import Modal from '@/components/common/Modal/Modal';
 import { useState } from 'react';
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
+import Link from "next/link";
 
 
 export default function Bars() {
@@ -24,7 +25,8 @@ export default function Bars() {
   return (
     <>
     <Header title="Casa Mezcal" />
-    <section className='page_content'>
+    <section className='pageWrapper hasHeader hasFooter'>
+        <div className="pageContainer">
         <div className="container-fluid px-4">
             <figure className={styles.barBanner}>
                 <Image src={bar} fill alt="" />
@@ -52,8 +54,6 @@ export default function Bars() {
 
                 </div>
             </figcaption>
-            <h3 className="sectionHead">View House Rules</h3>
-            <p>By Placing an Order or Booking, You are Accepting Liquidity&apos;s Ordering & Booking Terms and Conditions, And Assume Full Responsibility for any Associated Charges or Fees.</p>
             <h3 className="sectionHead">Order Again</h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -110,7 +110,7 @@ export default function Bars() {
 
         </div>
         <div className="container-fluid pt-4 px-4 bottomButton">
-            <Button href="/outlet-menu">View Menu</Button>
+            <Link href="/outlet-menu" className="bg-primary px-3 py-3 rounded-lg w-full text-white block text-center">View Menu</Link>
             
 
             <Modal isOpen={open} onClose={() => setOpen(false)} title="Order Again!">
@@ -122,7 +122,7 @@ export default function Bars() {
                         </div>
                         <div className={styles.itemMeta}>
                             <p className={styles.itemPrice}>$ 1.00</p>
-                            <QuantityButton min={1} max={10} onChange={handleQuantityChange} />
+                            <QuantityButton min={1} initialValue={1} max={10} onChange={handleQuantityChange} />
                         </div>
                     </div>
                     <div className={styles.itemCard}>
@@ -132,7 +132,7 @@ export default function Bars() {
                         </div>
                         <div className={styles.itemMeta}>
                             <p className={styles.itemPrice}>$ 1.00</p>
-                            <QuantityButton min={1} max={10} onChange={handleQuantityChange} />
+                            <QuantityButton min={1} initialValue={3} max={10} onChange={handleQuantityChange} />
                         </div>
                     </div>
                     <div className={styles.itemCard}>
@@ -142,7 +142,7 @@ export default function Bars() {
                         </div>
                         <div className={styles.itemMeta}>
                             <p className={styles.itemPrice}>$ 1.00</p>
-                            <QuantityButton min={1} max={10} onChange={handleQuantityChange} />
+                            <QuantityButton min={1} initialValue={2} max={10} onChange={handleQuantityChange} />
                         </div>
                     </div>
                 </div>
@@ -162,6 +162,7 @@ export default function Bars() {
                     <button className="w-full bg-black text-white py-2 rounded-lg">Checkout</button>
                 </div>
             </Modal>
+        </div>
         </div>
     </section>
     <BottomNavigation />

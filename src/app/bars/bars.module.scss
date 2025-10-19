@@ -50,6 +50,7 @@
         padding-top: 10px;
         border-top: 1px solid rgba(52,56,51,0.1);
         margin-top: 10px;
+        font-weight: 600;
 
         .add_btn {
             display: flex;
@@ -66,8 +67,6 @@
 .itemWrapper {
     display: flex;
     flex-direction: column;
-    padding: 12px;
-    border-radius: 10px;
     background: #fff;
     margin-bottom: 16px;
 

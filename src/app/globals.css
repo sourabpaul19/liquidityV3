@@ -75,10 +75,16 @@ body {
   display: block;
   height: 100%;
   background: #fff;
-  overflow: auto;
+  /* overflow: auto; */
 }
 .pageWrapper.hasHeader {
   padding-top: 56px;
+}
+.pageWrapper.hasHeader.hasMenu {
+  padding-top: 108px;
+}
+.pageWrapper.hasHeader.hasBottomNav {
+  padding-bottom: 108px;
 }
 .pageWrapper.hasFooter {
   padding-bottom: 56px;
@@ -157,6 +163,16 @@ body {
     text-transform: uppercase;
     color: #888;
     font-size: 16px;
+}
+.sectionHead {
+    font-size: 18px;
+    margin: 16px 0;
+    font-weight: bold;
+}
+.bottomButton {
+  position: sticky;
+  bottom: 0;
+  padding: 16px;
 }
 
 .chevron {

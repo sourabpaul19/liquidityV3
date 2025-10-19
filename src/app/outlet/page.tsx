@@ -390,7 +390,7 @@ const handleRemoveMixer = () => {
         </div>
       </header>
 
-      <section className='page_content padding_top'>
+      <section className='pageWrapper'>
         <div ref={bannerRef} className={`${styles.outletBanner}`}>
             <Image src={bar} alt="" fill />
         </div>
@@ -432,7 +432,7 @@ const handleRemoveMixer = () => {
         <div
           className={classNames(
             styles.catMenu,
-            "bg-white border-b-4 border-primary overflow-x-auto no-scrollbar w-full z-40 transition-all duration-300",
+            "bg-white border-b-4 border-gray-200 overflow-x-auto no-scrollbar w-full z-40 transition-all duration-300",
             {
               "fixed top-[56px] opacity-100 translate-y-0": showCategoryBar,
               "fixed top-[0px] opacity-0 -translate-y-full pointer-events-none": !showCategoryBar,
@@ -446,7 +446,7 @@ const handleRemoveMixer = () => {
                 onClick={() => scrollToSection(cat.id)}
                 className={`whitespace-nowrap px-5 py-3 font-medium ${
                   activeCategory === cat.id
-                    ? "bg-primary text-white"
+                    ? "bg-gray-200 text-black text-gray-600"
                     : "text-gray-600"
                 }`}
               >

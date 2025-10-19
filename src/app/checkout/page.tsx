@@ -20,7 +20,7 @@ interface Card {
   image: string;
 }
 
-export default function OTPVerify() {
+export default function Checkout() {
     const router = useRouter();
     const [otp, setOtp] = useState("");
     const [active, setActive] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export default function OTPVerify() {
         </header>
 
         <section className='pageWrapper hasHeader hasFooter'>
-            <div className={styles.otpWrapper}>
+            <div className='pageContainer'>
                 <div className={styles.stickyHeader}>
                     Vertige Investment Group Annual Summit
                 </div>
