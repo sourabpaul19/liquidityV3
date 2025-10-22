@@ -10,8 +10,9 @@ import { ChevronRight, MapPin, PhoneCall, Mail } from "lucide-react";
 export default function OrderDetails() {
   return (
     <>
-        <Header title="My Orders" buttonType='menu' />
-        <section className='page_content'>
+        <Header title="My Orders" />
+        <section className='pageWrapper hasHeader hasFooter'>
+            <div className='pageContainer'>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4">
                 <div>
                     <div className={styles.barWrapper}>
@@ -122,6 +123,7 @@ export default function OrderDetails() {
                         </Link>
                     </div>
                 </div>
+            </div>
             </div>
         </section> 
         <BottomNavigation />

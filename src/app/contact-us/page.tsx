@@ -30,14 +30,14 @@ export default function ContactUs() {
   return (
     <>
       <Header title="Contact Us" />
-      <section className="page_content">
+      <section className='pageWrapper hasHeader hasFooter'>
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4"
+          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-4 px-4"
         >
           <input
             type="text"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Full Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -46,7 +46,7 @@ export default function ContactUs() {
 
           <input
             type="email"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Email Address"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -55,22 +55,22 @@ export default function ContactUs() {
 
           <input
             type="tel"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Phone Number"
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
           />
 
           <textarea
-            className="textbox white square col-span-full min-h-[120px]"
+            className={`${styles.textarea} rounded-lg col-span-full min-h-[120px]`}
             placeholder="Write your message..."
             value={form.message}
             onChange={(e) => setForm({ ...form, message: e.target.value })}
             required
           ></textarea>
 
-          <div className={`${styles.fixedbottom} pt-4 bottomButton fixed`}>
-            <Button type="submit">Send Message</Button>
+          <div className={`${styles.fixedbottom} bottomButton left-0 fixed`}>
+            <button type="submit" className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center">Send Message</button>
           </div>
         </form>
       </section>

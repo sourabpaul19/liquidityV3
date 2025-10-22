@@ -38,7 +38,8 @@ export default function Faqs() {
   return (
     <>
       <Header title="FAQs" />
-      <section className="page_content">
+      <section className='pageWrapper hasHeader hasFooter'>
+        <div className="pageContainer pt-4">
         <div className="space-y-4 px-4">
           {faqs.map((faq, index) => (
             <div
@@ -64,6 +65,7 @@ export default function Faqs() {
               )}
             </div>
           ))}
+        </div>
         </div>
       </section>
       <BottomNavigation />

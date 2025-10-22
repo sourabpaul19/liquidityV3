@@ -38,14 +38,14 @@ export default function EditProfile() {
   return (
     <>
       <Header title="Edit Profile" />
-      <section className="page_content">
+      <section className='pageWrapper hasHeader hasFooter'>
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 px-4 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 px-4 pt-4 gap-4"
         >
           <input
             type="text"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Enter Your Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -53,7 +53,7 @@ export default function EditProfile() {
 
           <input
             type="tel"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Contact No"
             value={form.contact}
             onChange={(e) => setForm({ ...form, contact: e.target.value })}
@@ -61,7 +61,7 @@ export default function EditProfile() {
 
           <input
             type="email"
-            className="textbox white square"
+            className={`${styles.textbox} rounded-lg`}
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -75,11 +75,11 @@ export default function EditProfile() {
             maxDate={minAgeDate}
             showYearDropdown
             scrollableYearDropdown
-            className="textbox white square w-full"
+            className={`${styles.textbox} rounded-lg w-full`}
           />
 
-          <div className={`${styles.fixedbottom} pt-4 bottomButton fixed`}>
-            <Button type="submit">Update Profile</Button>
+          <div className={`${styles.fixedbottom} pt-4 left-0 bottomButton fixed`}>
+            <button type="submit" className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center">Update Profile</button>
           </div>
         </form>
       </section>

@@ -8,8 +8,8 @@ export default function GeneralTerms() {
   return (
     <>
     <Header title='General Terms' />
-    <section className='page_content'>
-        <div className="cmsContent px-4">
+    <section className='pageWrapper hasHeader hasFooter'>
+        <div className="cmsContent pt-4 px-4">
             <p><u><strong>Liquidity terms and conditions for Customers order through Liquidity APP</strong></u></p>
             <p>ORDERING time is between 11 am till 11 pm on any given days ,other than days when as per respective State Excise laws , sale of alcohol is prohibited.All alcoholic products must be consumed in the outlet itself. Alcoholic products cannot be taken out from the premises under any circumstances.Food and alcohol products ordered ,must be consumed as scheduled by you ,while placing of the order .You may place order for upto 72 hours in advance, within the stipulated ordering time .You can order a maximum of 10 units each of any available brand in the categories of Single Malt Whisky, Premium Whisky , Regular Whisky , Vodka , Cognac , Rum , Gin, Tequila , Brandy ,Liqueurs, Champagne,Wine (per unit is = 30 ml) , Low Alcoholic Beverages ( per unit is 500 ml ) Beers( per unit is 330 ml ) per transaction.</p>
             <p></p>

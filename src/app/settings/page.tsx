@@ -9,9 +9,9 @@ import styles from "./settings.module.scss";
 export default function Settings() {
   return (
     <>
-        <Header title="Settings" buttonType="menu" />
-        <section className='page_content'>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4">
+        <Header title="Settings" />
+        <section className='pageWrapper hasHeader hasFooter'>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 px-4">
                 <Link href="/notifications" className={styles.menuThumb}>
                     <svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="512" height="512" x="0" y="0" viewBox="0 0 24 24">
                         <g>

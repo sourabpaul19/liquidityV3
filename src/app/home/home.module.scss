@@ -164,3 +164,45 @@
 .modalContent {
     padding: 0;
 }
+.stickyMessage {
+    width: 100%;
+    position: fixed;
+    bottom: 0;
+    padding: 10px 16px;
+    bottom: 58px;
+    background: #00bf63;
+    color: #fff;
+    line-height: 1.2;
+
+    span {
+        font-size: 14px;
+    }
+
+    .progressLayer {
+        flex: 1;
+        height: 5px;
+        background: #00bf63;
+        border-radius: 5px;
+        display: flex;
+        overflow: hidden;
+        margin-top: 5px;
+
+        .progressBar {
+            width: 0;
+            height: 5px;
+            background: #fff;
+            border-radius: 5px;
+            animation: progressBarFill 5s infinite ease-in-out;
+        }
+
+
+    }
+}
+@keyframes progressBarFill {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}

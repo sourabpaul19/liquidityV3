@@ -9,9 +9,9 @@ import Link from 'next/link';
 export default function MyOrders() {
   return (
     <>
-        <Header title="My Orders" buttonType='menu' />
-        <section className='page_content'>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 px-4">
+        <Header title="My Orders" />
+        <section className='pageWrapper hasHeader hasFooter'>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-4 px-4">
                 <div className={styles.orderCard}>
                     <div className='flex gap-4 p-4 justify-between'>
                         <figure>

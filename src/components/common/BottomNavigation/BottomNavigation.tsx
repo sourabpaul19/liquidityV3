@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, ShoppingBag, Wallet, User } from "lucide-react";
+import { Home, ShoppingBag, CalendarFold, User } from "lucide-react";
 import { motion } from "framer-motion";
 
 const BottomNavigation = () => {
@@ -11,7 +11,7 @@ const BottomNavigation = () => {
   const navItems = [
     { label: "Home", icon: <Home size={22} />, path: "/home" },
     { label: "Cart", icon: <ShoppingBag size={22} />, path: "/cart" },
-    { label: "Wallet", icon: <Wallet size={22} />, path: "/wallet" },
+    { label: "Events", icon: <CalendarFold size={22} />, path: "/events" },
     { label: "Profile", icon: <User size={22} />, path: "/profile" },
   ];
 

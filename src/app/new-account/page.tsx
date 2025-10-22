@@ -76,7 +76,7 @@ export default function NewAccount() {
                 <input type="email" className={`${styles.textbox} rounded-lg`} placeholder='Email' />
                 <input type="tel" className={`${styles.textbox} rounded-lg`} placeholder='Phone Number' />
                 <input type="password" className={`${styles.textbox} rounded-lg`} placeholder='Password' />
-                <input type="password" className={`${styles.textbox} rounded-lg`} placeholder='Comfirm Password' />
+                <input type="password" className={`${styles.textbox} rounded-lg`} placeholder='Confirm Password' />
                 <button type='submit' className='bg-primary px-3 py-3 rounded-lg w-full text-white'>Create Account</button>
               </form>
               <p className='text-center'>or</p>

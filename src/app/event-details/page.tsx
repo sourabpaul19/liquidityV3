@@ -13,7 +13,8 @@ export default function Events() {
   return (
     <>
     <Header title='Events' />
-    <section className='page_content'>
+    <section className='pageWrapper hasHeader hasFooter'>
+        <div className='pageContainer py-4'>
         <div className="container-fluid px-4">
             <figure className={styles.eventBanner}>
                 <Image src={bar} fill alt="" />
@@ -53,6 +54,7 @@ export default function Events() {
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     </section>
     <BottomNavigation />    

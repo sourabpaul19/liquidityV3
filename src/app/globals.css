@@ -70,6 +70,12 @@ body {
 .bg-transparent {
   background: transparent !important;
 }
+.text-danger {
+    color: #dc3545!important
+}
+.text-success {
+    color: #198754!important
+}
 
 .pageWrapper {
   display: block;
@@ -193,6 +199,33 @@ body {
   }
 }
 
+@keyframes progressBarFill {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
 .animate-arrow {
   animation: pulse 1.2s infinite ease-in-out;
+}
+
+.bottomButton.fixed {
+    width: 100%;
+    position: fixed;
+    bottom: 58px;
+}
+.cmsContent p {
+    color: #000;
+    text-align: justify;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 20px
+}
+
+.cmsContent ol {
+    padding-left: 10px;
+    list-style: decimal
 }

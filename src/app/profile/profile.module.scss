@@ -75,9 +75,8 @@
 .profileWrapper {
     display: flex;
     flex-direction: column;
-    padding: 0 1em;
+    padding: 0;
     background: #fff;
-    border-radius: 10px;
 
     .profileItem {
         display: flex;
@@ -88,6 +87,48 @@
 
         &:last-child {
             border: none;
+        }
+
+        p {
+            color: #888;
+            font-size: 14px;
+        }
+
+    }
+}
+.menu {
+    padding: 0 20px 0;
+
+    .menuItem {
+        display: flex;
+        padding: 16px;
+        align-items: center;
+        justify-content: space-between;
+        background: #eee;
+        border-radius: 8px;
+        margin-bottom: 16px;
+
+        .menuIcon {
+            display: inline-flex;
+            width: 32px;
+            height: 32px;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            background: #fff;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menuText {
+            margin-left: 20px;
+            margin-right: auto;
+
+            h5 {
+                font-size: 16px;
+                }
+                p {
+                font-size: 14px;
+                }
         }
     }
 }

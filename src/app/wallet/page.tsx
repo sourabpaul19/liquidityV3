@@ -19,7 +19,7 @@ export default function Wallet() {
   return (
     <>
     <Header title="Wallet" />
-    <section className='page_content'>
+    <section className='pageWrapper hasHeader hasFooter hasBottomNav'>
       <div className={styles.walletBox}>
         <h4>Liquidity Cash</h4>
         <h2>$0.00</h2>
@@ -56,20 +56,20 @@ export default function Wallet() {
         </div>
       </div>
       <div className="container-fluid pt-4 px-4 bottomButton fixed">
-        <Button onClick={() => setOpen(true)}>+ Add to balance</Button>
+        <button className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center' onClick={() => setOpen(true)}>+ Add to balance</button>
       </div>
     </section>
     <Modal isOpen={open} onClose={() => setOpen(false)} title="Add Liquidity Cash">  
         <h5 className="mb-2">Enter amount here</h5>
         <form>
-          <input type='text' placeholder="Enter amount" className="textbox white square" />
+          <input type='text' placeholder="Enter amount" className={styles.textbox} />
         </form>    
         <div className="flex items-center justify-between mb-4">
           <h3>New Balance</h3>
           <h3>$ 100.00</h3>
         </div>
         <div className="grid grid-cols-1 gap-4">
-            <button className="w-full bg-primary text-white py-2 rounded-lg">Add cash</button>
+            <button className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center">Add cash</button>
         </div>
     </Modal>
     <BottomNavigation />

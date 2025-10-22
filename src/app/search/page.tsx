@@ -10,8 +10,8 @@ export default function Search() {
   return (
     <>
     <Header title="Search" />
-    <section className='page_content padding_top'>
-      <div className='bg-white px-4 pb-4 sticky top-0'>
+    <section className='pageWrapper hasHeader'>
+      <div className='bg-white px-4 py-2 sticky top-0'>
         <div className={styles.searchBar}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path fillRule="evenodd" clipRule="evenodd" d="M11 0.25C5.61522 0.25 1.25 4.61522 1.25 10C1.25 15.3848 5.61522 19.75 11 19.75C16.3848 19.75 20.75 15.3848 20.75 10C20.75 4.61522 16.3848 0.25 11 0.25ZM2.75 10C2.75 5.44365 6.44365 1.75 11 1.75C15.5563 1.75 19.25 5.44365 19.25 10C19.25 14.5563 15.5563 18.25 11 18.25C6.44365 18.25 2.75 14.5563 2.75 10Z" fill="currentColor"></path>

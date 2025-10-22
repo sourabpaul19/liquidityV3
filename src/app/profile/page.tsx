@@ -5,14 +5,14 @@ import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigat
 import Header from '@/components/common/Header/Header';
 import Button from '@/components/common/Button/Button';
 import styles from "./profile.module.scss";
-import { Wallet, UserRoundPen } from "lucide-react";
+import { UserRoundPen, ChevronRight, User, Wallet, Home, History, CalendarFold, Settings, LogOut } from "lucide-react";
 import Link from 'next/link';
 
 export default function Profile() {
   return (
     <>
     <Header title="My Profile" />
-    <section className='page_content padding_top'>
+    <section className='pageWrapper hasHeader hasBottomNav'>
       <div className={styles.profileHeader}>
         <div className={styles.profileCard}>
           <div className={styles.profileTop}>
@@ -37,21 +37,49 @@ export default function Profile() {
           </div>
         </div>
       </div>
-
-      <div className='px-4'>
-        <div className={styles.profileWrapper}>
-          <div className={styles.profileItem}>
-            <p>Email</p>
-            <h4>sourab@liquiditybars.com</h4>
-          </div>
-          <div className={styles.profileItem}>
-            <p>Date of Birth</p>
-            <h4>20 May 2025</h4>
-          </div>
-        </div>
-      </div>
+      <nav className={styles.menu}>
+        <Link className={styles.menuItem} href="/">
+              <span className={styles.menuIcon}>
+                <Wallet size={20} />
+              </span>
+              <span className={styles.menuText}>
+                <h5>Liquidity Cash</h5>
+                <p className='text-red-700'>Only supported on the app</p>
+              </span>
+              <ChevronRight size={16} />
+            </Link>
+            <div className={styles.menuList}>
+              <Link className={styles.menuItem} href="/my-orders">
+                <span className={styles.menuIcon}>
+                  <History size={20} />
+                </span>
+                <span className={styles.menuText}>
+                  <h5>Order History</h5>
+                </span>
+                <ChevronRight size={16} />
+              </Link>
+              <Link className={styles.menuItem} href="/settings">
+                <span className={styles.menuIcon}>
+                  <Settings size={20} />
+                </span>
+                <span className={styles.menuText}>
+                  <h5>Settings</h5>
+                </span>
+                <ChevronRight size={16} />
+              </Link>
+              <Link className={styles.menuItem} href="/">
+                <span className={styles.menuIcon}>
+                  <LogOut size={20} />
+                </span>
+                <span className={styles.menuText}>
+                  <h5>Log Out</h5>
+                </span>
+                <ChevronRight size={16} />
+              </Link>
+            </div>
+          </nav>
       <div className="container-fluid pt-4 px-4 bottomButton fixed">
-        <Button variant='danger'>Delete Account</Button>
+        <button className='bg-red-500 px-3 py-3 rounded-lg w-full text-white text-center'>Delete Account</button>
       </div>
     </section>
     <BottomNavigation />
