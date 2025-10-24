@@ -99,6 +99,7 @@ body {
   display: block;
   height: 100%;
   overflow: auto;
+  padding: 6px 0;
 }
 .header {
   width: 100%;
