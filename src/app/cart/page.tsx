@@ -136,7 +136,7 @@ export default function Cart() {
                 </div>
 
                 <div className={styles.itemCard}>
-                    <Link href='' className={styles.addItemButton}>+ Add Items</Link>
+                    <Link href='/outlet-menu' className={styles.addItemButton}>+ Add Items</Link>
                 </div>
 
                 {/* Pickup Location */}

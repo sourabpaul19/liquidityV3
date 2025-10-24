@@ -90,7 +90,7 @@ export default function NewAccount() {
   return (
     <>
       <Header buttonType="menu" />
-      <section className='pageWrapper hasHeader hasFooter'>
+      <section className='pageWrapper hasHeader hasFooter hasBottomNav'>
         <div className='pageContainer py-4'>
 
           {/* Banner Slider */}
@@ -127,8 +127,13 @@ export default function NewAccount() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 sm:grid-cols-2 gap-4 pt-4 px-4">
+                <Link href='/ongoing-orders' className='bg-primary px-3 py-3 flex justify-center rounded-lg w-full text-white'>Ongoing Orders</Link>
+                <Link href='/my-orders' className='bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white'>Past Order</Link>
+          </div>
+
           {/* Past Orders */}
-          <div className='container-fluid'>
+          {/* <div className='container-fluid'>
             <div className='sectionHeading'>
               <h4 className='section_title'>Past Orders</h4>
             </div>
@@ -158,7 +163,7 @@ export default function NewAccount() {
                 </SwiperSlide>
               ))}
             </Swiper>
-          </div>
+          </div> */}
 
           {/* Bars Section */}
           <div className='container-fluid'>
@@ -245,12 +250,12 @@ export default function NewAccount() {
             </div>
           </div>
         </div>
-        <div className={styles.stickyMessage}>
+        <Link href="/order-status" className={styles.stickyMessage}>
             <p>You have an Order In-Progress. Click to see your order status.</p>
             <div className={`${styles.progressLayer}`}>
                 <div className={styles.progressBar}></div>
             </div>
-        </div>
+        </Link>
       </section>
       <BottomNavigation />
     </>

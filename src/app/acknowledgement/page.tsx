@@ -36,9 +36,9 @@ export default function Acknowledgement() {
                 <p><strong>I understand that it is my responsibility to pick up my drink when it is ready,</strong> and that failure to do so in a timely manner means my drink could get stolen, or disposed of by the bar</p>
                 <div className="grid grid-cols-1 mt-7 gap-4">
                     <form onSubmit={handleVerify} className="space-y-4">
-                        <button type='submit' className='bg-primary px-3 py-3 rounded-lg w-full text-white'>I Understand</button>
-                        <button type='submit' className='bg-black px-3 py-3 rounded-lg w-full text-white'>Yes, Don&apos;t Show Again</button>
-                        <button type='submit' className='bg-black px-3 py-3 rounded-lg w-full text-white'>No, Cancel</button>
+                        <Link href='/order-success' className='bg-primary px-3 py-3 flex justify-center rounded-lg w-full text-white'>I Understand</Link>
+                        <Link href='/' className='bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white'>Yes, Don&apos;t Show Again</Link>
+                        <Link href='/' className='bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white'>No, Cancel</Link>
                     </form>
                 </div>
             </div>

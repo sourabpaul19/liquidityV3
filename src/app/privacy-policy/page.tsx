@@ -9,6 +9,7 @@ export default function PrivacyPolicy() {
     <>
     <Header title='Privacy Policy' />
     <section className='pageWrapper hasHeader hasFooter'>
+        <div className='pageContainer'>
         <div className="cmsContent pt-4 px-4">
             <p>This document is an electronic record in terms of Information Technology Act, 2000 and rules there under as applicable and the amended provisions pertaining to electronic records in various statutes as amended by the Information Technology Act, 2000. This document is published in accordance with the provisions of Rule 3 (1) of the Information Technology (Intermediaries Guidelines) Rules, 2011 that require publishing the rules and regulations, privacy policy and Terms of Use for access or usage of <a href='http://liquiditybars.com/'><u>http://liquiditybars.com</u></a> website and Liquidity application for mobile and handheld devices.</p>
             <ol>
@@ -320,6 +321,7 @@ export default function PrivacyPolicy() {
                     </li>
                 </ol>
             </ol>
+        </div>
         </div>
     </section>
     <BottomNavigation />

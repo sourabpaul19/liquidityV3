@@ -52,6 +52,7 @@ export default function NewAccount() {
         </button>
     </header>
     <section className='pageWrapper hasHeader'>
+      <div className="pageContainer">
       <div className={styles.loginWrapper}>
         <div className="logoArea mb-auto">
           <Image alt="Liquidity Logo" src={logo} />
@@ -86,6 +87,7 @@ export default function NewAccount() {
               </button>
             </div>
         </div>
+      </div>
       </div>
       </section>
     </>   

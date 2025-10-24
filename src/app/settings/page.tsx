@@ -11,7 +11,8 @@ export default function Settings() {
     <>
         <Header title="Settings" />
         <section className='pageWrapper hasHeader hasFooter'>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 px-4">
+            <div className='pageContainer'>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 px-4">
                 <Link href="/notifications" className={styles.menuThumb}>
                     <svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="512" height="512" x="0" y="0" viewBox="0 0 24 24">
                         <g>
@@ -110,6 +111,7 @@ export default function Settings() {
                     </svg>
                     <p>General Terms & Conditions</p>
                 </Link>
+            </div>
             </div>
         </section> 
         <BottomNavigation />

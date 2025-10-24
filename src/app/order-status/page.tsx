@@ -50,6 +50,7 @@ export default function OrderSuccess() {
 
     </header>
     <section className='pageWrapper hasHeader'>
+        <div className="pageContainer">
         <div className={styles.successWrapper}>
             <h4 className="text-center mb-2">The Bar Has Received Your Order!</h4>
             <h5 className="text-center">Please wait near the bar</h5>
@@ -100,8 +101,8 @@ export default function OrderSuccess() {
             
             
         </div>
+        </div>
     </section>
-    <BottomNavigation />
     </>
   )
 }

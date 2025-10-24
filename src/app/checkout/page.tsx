@@ -111,7 +111,7 @@ export default function Checkout() {
                 </div>
 
                 <div className={styles.itemCard}>
-                    <Link href='' className={styles.addItemButton}>+ Add Items</Link>
+                    <Link href='/outlet' className={styles.addItemButton}>+ Add Items</Link>
                 </div>
 
                 {/* Pickup Location */}

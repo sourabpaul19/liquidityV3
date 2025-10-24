@@ -1,3 +1,5 @@
+'use client';
+import { useRouter } from "next/navigation";
 import React from 'react'
 import Image from 'next/image';
 import logo from '../../../public/images/logo.png';
@@ -6,6 +8,13 @@ import styles from "./welcome.module.scss";
 import Link from 'next/link';
 
 export default function Welcome() {
+
+  const router = useRouter();
+
+  const handleVerify = (e: React.FormEvent) => {
+      e.preventDefault();
+      router.push("/outlet");
+  };
   return (
     <>
       <div className={styles.welcome_wrapper}>
@@ -14,13 +23,13 @@ export default function Welcome() {
         </div>
         <p>Welcome, please sign in or enter<br/>your event information</p>
 
-        <form className={`${styles.welcomeForm} mt-5 mb-3`}>
-            <input type='email' className={`${styles.textbox} rounded-lg `} placeholder='Enter event code' />
+        <form onSubmit={handleVerify} className={`${styles.welcomeForm} mt-5 mb-3`}>
+            <input type='text' className={`${styles.textbox} rounded-lg `} placeholder='Enter event code' />
         </form>
         <p>or</p>
         <div className={styles.welcomeForm}>
-            <div className="grid grid-cols-2 sm:grid-cols-2 my-3 gap-4">
-                <Link href="/outlet" className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center'>Scan Event QR</Link>
+            <div className="grid grid-cols-1 sm:grid-cols-1 my-3 gap-4">
+                {/* <Link href="/outlet" className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center'>Scan Event QR</Link> */}
                 <Link href="/choose" className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center'>Sign Up / Sign In</Link>
             </div>
         </div>

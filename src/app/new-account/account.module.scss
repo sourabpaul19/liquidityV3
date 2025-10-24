@@ -1,10 +1,10 @@
 .loginWrapper {
-    display: flex;
+    display: block;
     flex-direction: column;
     height: 100%;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: 16px 0;
     background: #fff;
 
     p {
@@ -14,7 +14,7 @@
     .loginForm {
         display: block;
         width: 100%;
-        padding: 0 40px;
+        padding: 16px 40px;
         margin-bottom: auto;
         margin-top: auto;
     }

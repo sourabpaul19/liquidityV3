@@ -157,9 +157,9 @@ export default function Bars() {
                         </div>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button className="w-full bg-primary text-white py-2 rounded-lg">Add to cart</button>
-                    <button className="w-full bg-black text-white py-2 rounded-lg">Checkout</button>
+                <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
+                    <button className="w-full bg-primary text-white px-3 py-3 rounded-lg">Add to cart</button>
+                    <button className="w-full bg-black text-white px-3 py-3 rounded-lg">Checkout</button>
                 </div>
             </Modal>
         </div>

@@ -11,7 +11,8 @@ export default function MyOrders() {
     <>
         <Header title="My Orders" />
         <section className='pageWrapper hasHeader hasFooter'>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-4 px-4">
+            <div className='pageContainer py-4'>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 px-4">
                 <div className={styles.orderCard}>
                     <div className='flex gap-4 p-4 justify-between'>
                         <figure>
@@ -48,6 +49,7 @@ export default function MyOrders() {
                         <Link href="/order-details" className='color-primary'>View Details</Link>
                     </div>
                 </div>
+            </div>
             </div>
         </section> 
         <BottomNavigation />

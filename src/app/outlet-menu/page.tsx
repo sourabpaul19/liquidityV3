@@ -165,6 +165,7 @@ const OutletPage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [modalQty, setModalQty] = useState<number>(1);
   const [cartItems, setCartItems] = useState<{ [key: number]: number }>({});
+  const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const scrollToSection = (id: string) => {
     const section = sectionRefs.current[id];
@@ -192,6 +193,18 @@ const OutletPage: React.FC = () => {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Center active category button in the scroll bar
+  useEffect(() => {
+    const activeButton = categoryButtonRefs.current[activeCategory];
+    if (activeButton) {
+      activeButton.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",  // 👈 ensures it scrolls to the center horizontally
+        block: "nearest",
+      });
+    }
+  }, [activeCategory]);
 
   const addToCart = (item: MenuItem, qty: number = 1) => {
     setCartItems((prev) => ({
@@ -283,14 +296,15 @@ const handleRemoveMixer = () => {
 
     
       <Header title="Casa Mezcal" />
-      <section className='pageWrapper hasHeader hasMenu'>
+      <section className='pageWrapper hasHeader hasMenu hasFooter'>
         
         {/* 🧭 Category bar */}
-        <div className={`${styles.catMenu} bg-white border-b-4 border-gray-200 overflow-x-auto no-scrollbar`}>
+        <div className={`${styles.catMenu} bg-white border-b-4 border-gray-200 overflow-x-auto no-scrollbar w-full z-40 transition-all duration-300`}>
           <div className="flex">
             {categories.map((cat) => (
               <button
                 key={cat.id}
+                ref={(el) => { categoryButtonRefs.current[cat.id] = el; }}
                 onClick={() => scrollToSection(cat.id)}
                 className={`whitespace-nowrap px-5 py-3 font-medium ${
                   activeCategory === cat.id
@@ -307,7 +321,7 @@ const handleRemoveMixer = () => {
         
 
         {/* 📜 Menu sections */}
-        <div className="px-4">
+        <div className="px-4 pb-20">
           {categories.map((cat) => (
             <div
               key={cat.id}
@@ -392,7 +406,7 @@ const handleRemoveMixer = () => {
               <h4>Add Extra Shots</h4>
               <p>$10.00/additional shot</p>
             </div>
-            <QuantityButton min={1} max={10} onChange={() => {}} />
+            <QuantityButton min={1} max={2} onChange={() => {}} />
           </div>
 
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-blue-200">
@@ -401,9 +415,9 @@ const handleRemoveMixer = () => {
   {selectedMixer ? (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2">
-        <div className="relative w-8 h-8 rounded overflow-hidden">
+        {/* <div className="relative w-8 h-8 rounded overflow-hidden">
           <Image src={selectedMixer.image} alt={selectedMixer.name} fill className="object-cover" />
-        </div>
+        </div> */}
         <span className="text-sm text-gray-700">{selectedMixer.name}</span>
       </div>
       <button
@@ -466,21 +480,21 @@ const handleRemoveMixer = () => {
     {mixers.map((mixer) => (
       <label
         key={mixer.id}
-        className={`cursor-pointer border rounded-lg p-2 flex items-center justify-between transition ${
+        className={`cursor-pointer border rounded-lg p-3 flex items-center justify-between transition ${
           tempSelectedMixer?.id === mixer.id
             ? "border-primary bg-blue-50"
             : "border-gray-200"
         }`}
       >
-        <div className="relative w-10 h-10">
+        {/* <div className="relative w-10 h-10">
           <Image
             src={mixer.image}
             alt={mixer.name}
             fill
             className="object-cover rounded-md"
           />
-        </div>
-        <span className="text-sm ml-4 mr-auto text-center">{mixer.name}</span>
+        </div> */}
+        <span className="text-sm mr-auto text-center">{mixer.name}</span>
         <input
           type="radio"
           name="mixer"
@@ -514,7 +528,7 @@ const handleRemoveMixer = () => {
   </div>
 </Modal>
 
-
+<BottomNavigation />
     </>
   );
 };

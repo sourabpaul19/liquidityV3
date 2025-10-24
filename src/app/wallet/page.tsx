@@ -20,6 +20,7 @@ export default function Wallet() {
     <>
     <Header title="Wallet" />
     <section className='pageWrapper hasHeader hasFooter hasBottomNav'>
+      <div className='pageContainer'>
       <div className={styles.walletBox}>
         <h4>Liquidity Cash</h4>
         <h2>$0.00</h2>
@@ -57,6 +58,7 @@ export default function Wallet() {
       </div>
       <div className="container-fluid pt-4 px-4 bottomButton fixed">
         <button className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center' onClick={() => setOpen(true)}>+ Add to balance</button>
+      </div>
       </div>
     </section>
     <Modal isOpen={open} onClose={() => setOpen(false)} title="Add Liquidity Cash">  

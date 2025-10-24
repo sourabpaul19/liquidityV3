@@ -13,6 +13,7 @@ export default function Profile() {
     <>
     <Header title="My Profile" />
     <section className='pageWrapper hasHeader hasBottomNav'>
+      <div className='pageContainer'>
       <div className={styles.profileHeader}>
         <div className={styles.profileCard}>
           <div className={styles.profileTop}>
@@ -80,6 +81,7 @@ export default function Profile() {
           </nav>
       <div className="container-fluid pt-4 px-4 bottomButton fixed">
         <button className='bg-red-500 px-3 py-3 rounded-lg w-full text-white text-center'>Delete Account</button>
+      </div>
       </div>
     </section>
     <BottomNavigation />
