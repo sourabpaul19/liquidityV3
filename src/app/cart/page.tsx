@@ -8,7 +8,7 @@ import user from '../../../public/images/3177440.png';
 import Button from '@/components/common/Button/Button';
 import Link from "next/link";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
-import { ChevronDown } from "lucide-react"; 
+import { ChevronDown, ChevronRight } from "lucide-react"; 
 import CardSelector from "@/components/common/CardSelector/CardSelector";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
 import Header from "@/components/common/Header/Header";
@@ -52,11 +52,32 @@ export default function Cart() {
         console.log("Selected card:", card);
     };
 
+    const orders = [
+        { id: 1, orderid: 'LIQ-241136', title: 'Casa Mezcal', ordertime: 'Oct 10, 2025 | 20:01', orderStatus: 'Order Received' },
+        { id: 2, orderid: 'LIQ-241137', title: 'Bar Azul', ordertime: 'Oct 12, 2025 | 19:45', orderStatus: 'Preparing Order' },
+        { id: 3, orderid: 'LIQ-241138', title: 'Sky Lounge', ordertime: 'Oct 14, 2025 | 22:15', orderStatus: 'Ready for Pickup' },
+    ];
+
     return (
         <>
         <Header title="Casa Mezcal" />
         <section className='pageWrapper hasHeader hasFooter'>
             <div className='pageContainer'>
+                <div className="flex flex-col gap-4 p-4">
+        {orders.map((order) => (
+          <Link key={order.id} href={`/order-status/`} className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}>
+            <div>
+              <h3 className="font-semibold text-lg">
+                {order.orderid} - {order.title}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {order.ordertime} - <span className="text-primary font-medium">{order.orderStatus}</span>
+              </p>
+            </div>
+            <ChevronRight size={22} color="gray" />
+          </Link>
+        ))}
+      </div>
               <div className={`${styles.itemCard}`}>
                 <h4 className="text-lg font-semibold">Items</h4>
               </div>

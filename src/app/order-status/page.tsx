@@ -44,9 +44,9 @@ export default function OrderSuccess() {
           />
         </svg>
         </button>
-        <button className="icon_only ml-auto">
+        <Link href="https://liquiditybars.com/faq.html" className="icon_only ml-auto">
             <EllipsisVertical />
-        </button>
+        </Link>
 
     </header>
     <section className='pageWrapper hasHeader'>
