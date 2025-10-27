@@ -187,7 +187,10 @@ export default function NewAccount() {
     <div className="flex items-center gap-2 mb-4">
       <MapPinned size={20} />
       <span className="text-sm font-medium">
-        Select Distance: <strong>{tempSelectedDistance} km</strong>
+        Select Distance:{" "}
+        <strong>
+          {tempSelectedDistance ? `${tempSelectedDistance.name}` : "0"} km
+        </strong>
       </span>
     </div>
 
@@ -196,8 +199,13 @@ export default function NewAccount() {
       min="1"
       max="100"
       step="1"
-      value={tempSelectedDistance || 0}
-      onChange={(e) => setTempSelectedDistance(Number(e.target.value))}
+      value={tempSelectedDistance?.id || 0}
+      onChange={(e) =>
+        setTempSelectedDistance({
+          id: Number(e.target.value),
+          name: `${e.target.value}`,
+        })
+      }
       className="w-full accent-primary cursor-pointer"
     />
 
@@ -227,6 +235,7 @@ export default function NewAccount() {
     </button>
   </div>
 </Modal>
+
 
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
