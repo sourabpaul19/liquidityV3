@@ -1,20 +1,17 @@
 "use client";
+
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import styles from "./cart.module.scss";
-import Image from 'next/image';
-import visa from '../../../public/images/visa.png';
-import user from '../../../public/images/3177440.png';
-import Button from '@/components/common/Button/Button';
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
-import { ChevronDown, ChevronRight } from "lucide-react"; 
-import CardSelector from "@/components/common/CardSelector/CardSelector";
-import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
+import { ChevronRight } from "lucide-react";
+
+import styles from "./cart.module.scss";
 import Header from "@/components/common/Header/Header";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
+import CardSelector from "@/components/common/CardSelector/CardSelector";
+import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
 
-// ✅ Define Card type
 interface Card {
   id: string;
   type: string;
@@ -23,206 +20,413 @@ interface Card {
 }
 
 export default function Cart() {
-    const router = useRouter();
-    const [otp, setOtp] = useState("");
-    const [active, setActive] = useState<string | null>(null);
+  const router = useRouter();
 
-    const handleButtonClick = () => {
-        router.back();
-    };
+  const [userId, setUserId] = useState<string | null>(null);
+  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [cartTotal, setCartTotal] = useState<number>(0);
+  const [cartCount, setCartCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
 
-    const handleVerify = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault(); 
-        router.push("/acknowledgement"); 
-    };
+  const [activePickup, setActivePickup] = useState<string | null>(null);
+  const [oldOrders, setOldOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
 
-    const handleClick = (value: string) => {
-        setActive(value);
-    };
+  const [showAcknowledgement, setShowAcknowledgement] = useState(false);
+  const [tipPercent, setTipPercent] = useState<number>(20);
+  const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
+  const [tipAmount, setTipAmount] = useState<number>(0);
+  const [deviceId, setDeviceId] = useState("web");
 
-    // ✅ Typed cards array
-    const cards: Card[] = [
-        { id: "1", type: "Visa", last4: "2304", image: "/images/visa.png" },
-        { id: "2", type: "MasterCard", last4: "5478", image: "/images/card.png" },
-        { id: "3", type: "Amex", last4: "7821", image: "/images/amex.png" },
-    ];
+  const cards: Card[] = [
+    { id: "1", type: "Visa", last4: "2304", image: "/images/visa.png" },
+    { id: "2", type: "MasterCard", last4: "5478", image: "/images/card.png" },
+    { id: "3", type: "Amex", last4: "7821", image: "/images/amex.png" },
+  ];
 
-    // ✅ Typed card select handler
-    const handleCardSelect = (card: Card) => {
-        console.log("Selected card:", card);
-    };
+  useEffect(() => {
+    const stored = localStorage.getItem("user_id");
+    if (stored) setUserId(stored);
+  }, []);
 
-    const orders = [
-        { id: 1, orderid: 'LIQ-241136', title: 'Casa Mezcal', ordertime: 'Oct 10, 2025 | 20:01', orderStatus: 'Order Received' },
-        { id: 2, orderid: 'LIQ-241137', title: 'Bar Azul', ordertime: 'Oct 12, 2025 | 19:45', orderStatus: 'Preparing Order' },
-        { id: 3, orderid: 'LIQ-241138', title: 'Sky Lounge', ordertime: 'Oct 14, 2025 | 22:15', orderStatus: 'Ready for Pickup' },
-    ];
+  useEffect(() => {
+      if (typeof window === "undefined") return;
+  
+      const storedId = localStorage.getItem("device_id");
+  
+      if (storedId) {
+        setDeviceId(storedId);
+      }
+    }, []);
 
-    return (
-        <>
-        <Header title="Casa Mezcal" />
-        <section className='pageWrapper hasHeader hasFooter'>
-            <div className='pageContainer'>
-                <div className="flex flex-col gap-4 p-4">
-        {orders.map((order) => (
-          <Link key={order.id} href={`/order-status/`} className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}>
-            <div>
-              <h3 className="font-semibold text-lg">
-                {order.orderid} - {order.title}
-              </h3>
-              <p className="text-sm text-gray-600">
-                {order.ordertime} - <span className="text-primary font-medium">{order.orderStatus}</span>
-              </p>
-            </div>
-            <ChevronRight size={22} color="gray" />
-          </Link>
-        ))}
+  // --- Fetch the cart ---
+  const fetchCart = async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/getCart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, device_id: deviceId }),
+      });
+      const data = await res.json();
+      if (data.status === "1") {
+        setCartItems(data.cartItems || []);
+        setCartTotal(Number(data.total_price || 0));
+        setCartCount(Number(data.total_quantity || 0));
+      } else {
+        setCartItems([]);
+        setCartTotal(0);
+        setCartCount(0);
+      }
+    } catch (err) {
+      console.error("Error fetching cart:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Fetch old orders ---
+  const fetchOldOrders = async () => {
+    if (!userId) return;
+    setLoadingOrders(true);
+    try {
+      const res = await fetch(
+        `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
+      );
+      const data = await res.json();
+      if (data.status === "1" && Array.isArray(data.orders)) {
+        const filtered = data.orders.filter(
+          (order: any) =>
+            order.status === "0" ||
+            order.status === "1" ||
+            order.status === "2"
+        );
+        setOldOrders(filtered);
+      } else {
+        setOldOrders([]);
+      }
+    } catch {
+      setOldOrders([]);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userId) {
+      fetchCart();
+      fetchOldOrders();
+    }
+  }, [userId]);
+
+  const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
+
+  // --- Remove item with proper content type ---
+  const removeItem = async (itemId: string) => {
+    if (!userId || !itemId) return;
+    setLoading(true);
+    try {
+      // Send user_id and item_id as x-www-form-urlencoded!
+      const params = new URLSearchParams();
+      params.append("user_id", userId);
+      params.append("item_id", itemId);
+
+      const res = await fetch("/api/deleteCartItem", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params,
+      });
+      const data = await res.json();
+      if (data.status === "1") {
+        await fetchCart();
+      } else {
+        alert(data.message || "Could not remove item.");
+      }
+    } catch (err) {
+      alert("Network error while removing item.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Update quantity ---
+  const updateQuantity = async (itemId: string, newQty: number) => {
+    const item = cartItems.find((i) => i.id === itemId);
+    if (!item) return;
+    if (newQty === 0) return removeItem(itemId);
+
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("user_id", userId || "");
+      params.append("item_id", itemId);
+      params.append("quantity", newQty.toString());
+
+      const res = await fetch("/api/updateCartItem", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params,
+      });
+      const data = await res.json();
+      if (data.status === "1") {
+        await fetchCart();
+      } else {
+        alert(data.message || "Could not update quantity.");
+      }
+    } catch (err) {
+      alert("Network error while updating quantity.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getOrderType = () => {
+    if (activePickup === "lounge") return "1";
+    if (activePickup === "dance") return "2";
+    if (activePickup === "nightclub") return "3";
+    return "1";
+  };
+
+  const createOrderNow = async () => {
+    const user_name = localStorage.getItem("user_name") || "";
+    const user_email = localStorage.getItem("user_email") || "";
+    const user_mobile = localStorage.getItem("user_mobile") || "";
+    const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
+    const shop_id = selected_shop?.id || "";
+    const localCart = JSON.parse(localStorage.getItem("liquidity_cart_cache") || "[]");
+
+    if (!userId || !user_name || !user_email || !user_mobile) {
+      alert("User information missing."); return;
+    }
+    if (!activePickup) { alert("Please select pickup location."); return; }
+    if (localCart.length === 0) { alert("Cart is empty."); return; }
+
+    const finalTotal = Number(cartTotal + 1 + 3.57 - 0.00 + tipValue).toFixed(2);
+
+    let formData = new FormData();
+    formData.append("name", user_name);
+    formData.append("email", user_email);
+    formData.append("mobile", user_mobile);
+    formData.append("user_id", userId || "");
+    formData.append("payment_type", "2");
+    formData.append("transaction_id", "");
+    formData.append("order_time", new Date().toISOString());
+    formData.append("table_no", "");
+    formData.append("device_id", "web");
+    formData.append("order_date", new Date().toISOString().split("T")[0]);
+    formData.append("shop_id", shop_id);
+    formData.append("wallet_amount", "0.00");
+    formData.append("online_amount", finalTotal);
+    formData.append("order_type", getOrderType());
+    formData.append("tips", Number(tipValue).toFixed(2));
+
+    try {
+      const res = await fetch(
+        "https://liquiditybars.com/canada/backend/admin/api/createOrder",
+        { method: "POST", body: formData }
+      );
+      const data = await res.json();
+      if (data.status == 1) {
+        router.push(`/order-success/${data.order_id}`);
+      } else {
+        alert(data.message || "Order failed");
+      }
+    } catch (err) {
+      alert("Something went wrong.");
+    }
+  };
+
+  const handleCheckout = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const skip = localStorage.getItem("ack_skip_popup");
+    if (!skip) { setShowAcknowledgement(true); return; }
+    createOrderNow();
+  };
+  const AcknowledgementPopup = () => (
+    <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
+        <h2 className="text-xl font-bold mb-4">Acknowledgement</h2>
+        <p className="text-gray-700 mb-5">
+          I understand that it is my responsibility to pick up my drink when it is ready, and that failure to do so in a timely manner means my drink could get stolen or disposed of by the bar.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button className="bg-primary text-white p-3 rounded-lg" onClick={() => { setShowAcknowledgement(false); createOrderNow(); }}>
+            I Understand
+          </button>
+          <button className="bg-green-600 text-white p-3 rounded-lg" onClick={() => { localStorage.setItem("ack_skip_popup", "1"); setShowAcknowledgement(false); createOrderNow(); }}>
+            Yes, Don’t Show Again
+          </button>
+          <button className="bg-gray-300 text-black p-3 rounded-lg" onClick={() => setShowAcknowledgement(false)}>
+            No, Cancel
+          </button>
+        </div>
       </div>
-              <div className={`${styles.itemCard}`}>
-                <h4 className="text-lg font-semibold">Items</h4>
+    </div>
+  );
+
+  const finalTotalAmount = Number(cartTotal + 1 + 3.57 - 0.00 + tipValue).toFixed(2);
+
+  return (
+    <>
+      {showAcknowledgement && <AcknowledgementPopup />}
+      <Header title="Casa Mezcal" />
+
+      <section className="pageWrapper hasHeader hasFooter">
+        <div className="pageContainer">
+          {/* Previous Orders */}
+          <div className="flex flex-col gap-4 p-4">
+            {loadingOrders ? (
+              <p className="text-gray-500">Loading previous orders...</p>
+            ) : oldOrders.length === 0 ? (
+              <p className="text-gray-500">No previous orders found.</p>
+            ) : (
+              oldOrders.map((order: any) => (
+                <Link
+                  key={order.id}
+                  href={`/order-status/${order.id}`}
+                  className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
+                >
+                  <div>
+                    <h3 className="font-semibold text-lg">{order.unique_id}</h3>
+                    <p className="text-sm text-gray-600">
+                      {order.order_date} - <span className="text-primary font-medium">{order.status === "1" ? "New" : "Accepted"}</span>
+                    </p>
+                  </div>
+                  <ChevronRight size={22} color="gray" />
+                </Link>
+              ))
+            )}
+          </div>
+
+          {/* Cart Items */}
+          {loading ? (
+            <p className="p-4 text-center text-gray-500">Loading cart...</p>
+          ) : cartItems.length === 0 ? (
+            <p className="p-4 text-center text-gray-500">Cart is empty</p>
+          ) : (
+            <>
+              {cartItems.map((item) => (
+                <div key={item.id} className={styles.itemCard}>
+                  <div className={styles.itemleft}>
+                    <h4>
+                      {item.product_name} <span>(1oz)</span>
+                    </h4>
+                    {item.choice_of_mixer_name && (
+                      <p>
+                        <strong>Choice of mixer:</strong> {item.choice_of_mixer_name}
+                      </p>
+                    )}
+                    {item.is_double_shot && (
+                      <p>
+                        <strong>Additional shots:</strong> {item.shot_count}
+                      </p>
+                    )}
+                    {item.special_instruction && (
+                      <p>
+                        <strong>Special Instruction:</strong> {item.special_instruction}
+                      </p>
+                    )}
+                  </div>
+                  <div className={styles.itemRight}>
+                    <h4>
+                      ${ (Number(item.price) * Number(item.quantity)).toFixed(2) }
+                    </h4>
+                    <QuantityButton
+                      min={0}
+                      max={10}
+                      initialValue={Number(item.quantity)}
+                      onChange={(val) => updateQuantity(item.id, val)}
+                      onDelete={() => removeItem(item.id)}
+                    />
+                  </div>
+                </div>
+              ))}
+              <div className={styles.itemCard}>
+                <Link href="/outlet-menu" className={styles.addItemButton}>
+                  + Add Items
+                </Link>
               </div>
-                {/* Item cards */}
-                <div className={`${styles.itemCard}`}>
-                    <div className={styles.itemleft}>
-                        <h4>1 x Gin Shot <span>(1oz)</span></h4>
-                        <p><strong>Choice of Gin:</strong> Cranberry Juice</p>
-                        <p><strong>Additional shots:</strong> 1 Additional Shot</p>
-                        <p><strong>Special Instruction:</strong> New Chilled</p>
-                    </div>
-                    <div className={styles.itemRight}>
-                        <h4>$ 20.00</h4>
-                        <QuantityButton
-                            min={1}
-                            max={10}
-                            initialValue={2}
-                            onChange={(val) => console.log("Quantity:", val)}
-                            onDelete={() => console.log("Item removed")}
-                        />
-                    </div>
-                </div>
+            </>
+          )}
 
-                <div className={`${styles.itemCard}`}>
-                    <div className={styles.itemleft}>
-                        <h4>1 x Gin Shot <span>(1oz)</span></h4>
-                        <p><strong>Choice of Gin:</strong> Cranberry Juice</p>
-                        <p><strong>Additional shots:</strong> None</p>
-                        <p><strong>Special Instruction:</strong> New Chilled</p>
-                    </div>
-                    <div className={styles.itemRight}>
-                        <h4>$ 20.00</h4>
-                        <QuantityButton
-                            min={1}
-                            max={10}
-                            initialValue={1}
-                            onChange={(val) => console.log("Quantity:", val)}
-                            onDelete={() => console.log("Item removed")}
-                        />
-                    </div>
-                </div>
-                <div className={`${styles.itemCard}`}>
-                    <div className={styles.itemleft}>
-                        <h4>1 x Gin Shot <span>(1oz)</span></h4>
-                        <p><strong>Choice of Gin:</strong> Cranberry Juice</p>
-                        <p><strong>Additional shots:</strong> None</p>
-                        <p><strong>Special Instruction:</strong> New Chilled</p>
-                    </div>
-                    <div className={styles.itemRight}>
-                        <h4>$ 20.00</h4>
-                        <QuantityButton
-                            min={1}
-                            max={10}
-                            initialValue={1}
-                            onChange={(val) => console.log("Quantity:", val)}
-                            onDelete={() => console.log("Item removed")}
-                        />
-                    </div>
-                </div>
-                <div className={`${styles.itemCard}`}>
-                    <div className={styles.itemleft}>
-                        <h4>1 x Gin Shot <span>(1oz)</span></h4>
-                        <p><strong>Choice of Gin:</strong> Cranberry Juice</p>
-                        <p><strong>Additional shots:</strong> None</p>
-                        <p><strong>Special Instruction:</strong> New Chilled</p>
-                    </div>
-                    <div className={styles.itemRight}>
-                        <h4>$ 20.00</h4>
-                        <QuantityButton
-                            min={1}
-                            max={10}
-                            initialValue={1}
-                            onChange={(val) => console.log("Quantity:", val)}
-                            onDelete={() => console.log("Item removed")}
-                        />
-                    </div>
-                </div>
-
-                <div className={styles.itemCard}>
-                    <Link href='/outlet-menu' className={styles.addItemButton}>+ Add Items</Link>
-                </div>
-
-                {/* Pickup Location */}
-                <div className={`${styles.pickupArea}`}>
-                    <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
-                    <div className={`${styles.pickupBlock} flex gap-3`}>
-                        {[
-                            { id: 'lounge', label: '1st Floor\nLounge' },
-                            { id: 'dance', label: '2nd Floor\nDance Floor' },
-                            { id: 'nightclub', label: 'Basement\nNightclub' },
-                        ].map(({ id, label }) => (
-                            <button
-                                key={id}
-                                type="button"
-                                onClick={() => handleClick(id)}
-                                className={`${styles.pickupItem} ${active === id ? 'bg-primary text-white' : ''}`}
-                            >
-                                {label.split('\n').map((line, i) => (
-                                    <span key={i} className="block">{line}</span>
-                                ))}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Billing */}
-                <div className={`${styles.billingArea}`}>
-                    <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
-                    <div className={styles.billingItem}>
-                        <p>Subtotal</p>
-                        <p>$ 17.95</p>
-                    </div>
-                    <div className={styles.billingItem}>
-                        <p>Liquidity Cash</p>
-                        <p>-$ 0.44</p>
-                    </div>
-                    <div className={styles.billingItem}>
-                        <p>Service Fee</p>
-                        <p>$ 1.00</p>
-                    </div>
-                    <div className={styles.billingItem}>
-                        <p>Taxes & Other Fees</p>
-                        <p>$ 3.57</p>
-                    </div>
-                    <div className={styles.billingItem}>
-                        <h4>Total</h4>
-                        <h4>$ 22.08</h4>
-                    </div>
-
-                    {/* ✅ Card Selector with typed cards */}
-                    <CardSelector cards={cards} onSelect={handleCardSelect} defaultCardId="1" />
-                </div>
-
-                {/* Tips Selector */}
-                <TipsSelector />
-
-                {/* Checkout button */}
-                <div className={styles.bottomArea}>
-                    <form onSubmit={handleVerify}>
-                        <button type='submit' className='bg-primary px-3 py-3 rounded-lg w-full text-white'>Checkout</button>
-                    </form>
-                </div>
+          {/* Pickup Location */}
+          <div className={styles.pickupArea}>
+            <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
+            <div className={`${styles.pickupBlock} flex gap-3`}>
+              {[
+                { id: "lounge", label: "1st Floor\nLounge" },
+                { id: "dance", label: "2nd Floor\nDance Floor" },
+                { id: "nightclub", label: "Basement\nNightclub" },
+              ].map((loc) => (
+                <button
+                  key={loc.id}
+                  type="button"
+                  onClick={() => setActivePickup(loc.id)}
+                  className={`${styles.pickupItem} ${activePickup === loc.id ? "bg-primary text-white" : ""}`}
+                >
+                  {loc.label.split("\n").map((line, i) => (
+                    <span key={i} className="block">{line}</span>
+                  ))}
+                </button>
+              ))}
             </div>
-        </section>
-        <BottomNavigation />
-        </>    
-    );
+          </div>
+
+          {/* Billing Summary */}
+          <div className={styles.billingArea}>
+            <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
+            <div className={styles.billingItem}>
+              <p>Subtotal</p>
+              <p>${cartTotal.toFixed(2)}</p>
+            </div>
+            <div className={styles.billingItem}>
+              <p>Liquidity Cash</p>
+              <p>-$0.00</p>
+            </div>
+            <div className={styles.billingItem}>
+              <p>Service Fee</p>
+              <p>$1.00</p>
+            </div>
+            <div className={styles.billingItem}>
+              <p>Taxes & Other Fees</p>
+              <p>$3.57</p>
+            </div>
+            <div className={styles.billingItem}>
+              <p>Tips</p>
+              <p>${tipValue.toFixed(2)}</p>
+            </div>
+            <div className={styles.billingItem}>
+              <h4>Total</h4>
+              <h4>${finalTotalAmount}</h4>
+            </div>
+            <CardSelector cards={cards} onSelect={() => {}} defaultCardId="1" />
+          </div>
+
+          {/* TIP SELECTOR */}
+          <TipsSelector
+            value={tipPercent}
+            onChange={(val: number, isAmount: boolean) => {
+              if (isAmount) {
+                setTipAmount(val);
+              } else {
+                setTipPercent(val);
+              }
+              setTipIsAmount(isAmount);
+            }}
+          />
+
+          {/* Checkout Button */}
+          <div className={styles.bottomArea}>
+            <form onSubmit={handleCheckout}>
+              <button type="submit" className="bg-primary px-3 py-3 rounded-lg w-full text-white">
+                Checkout
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+      <BottomNavigation />
+    </>
+  );
 }

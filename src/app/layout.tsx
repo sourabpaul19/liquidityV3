@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-
+import ToasterProvider from "./ToasterProvider";
 //import 'bootstrap/dist/css/bootstrap.min.css';
 import "./globals.css";
 import { Outfit } from 'next/font/google';
@@ -27,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable}`}>
       <body>
+        <ToasterProvider />
         {children}
       </body>
     </html>

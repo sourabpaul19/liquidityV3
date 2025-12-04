@@ -1,95 +1,222 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "./account.module.scss";
 import Image from "next/image";
 import logo from "../../../public/images/logo.png";
 import google from "../../../public/images/google.png";
-import Button from "@/components/common/Button/Button";
 import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function NewAccount() {
   const router = useRouter();
 
+  const [userId, setUserId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
     dob: null as Date | null,
+    password: "",
+    confirmPassword: "",
   });
 
-  const handleButtonClick = () => {
-        router.back();
-    };
+  // ✅ Get stored user_id from localStorage
+  useEffect(() => {
+    const storedId = localStorage.getItem("user_id");
+    const storedMobile = localStorage.getItem("user_mobile");
+    if (storedId) setUserId(storedId);
+    if (storedMobile) setForm((prev) => ({ ...prev, phone: storedMobile }));
+  }, []);
 
-  // Calculate the latest allowed date (today - 18 years)
+  // Calculate minimum allowed date (must be at least 18 years old)
   const today = new Date();
-  const minAgeDate = new Date(
-    today.getFullYear() - 18,
-    today.getMonth(),
-    today.getDate()
-  );
+  const minAgeDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleButtonClick = () => router.back();
+
+  // ✅ Handle form submission
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.dob) {
-      alert("Please select your date of birth");
+
+    if (!form.firstName || !form.lastName || !form.email || !form.dob) {
+      alert("Please fill in all required fields.");
       return;
     }
+
     if (form.dob > minAgeDate) {
-      alert("You must be at least 18 years old to sign up");
+      alert("You must be at least 18 years old to sign up.");
       return;
     }
-    router.push("/checkout");
+
+    if (form.password !== form.confirmPassword) {
+      alert("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const payload = new URLSearchParams({
+        id: userId,
+        name: `${form.firstName} ${form.lastName}`,
+        email: form.email,
+        dob: form.dob.toISOString().split("T")[0],
+        password: form.password,
+      });
+
+      const response = await fetch(
+        "https://liquiditybars.com/canada/backend/admin/api/updateProfile/",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: payload.toString(),
+        }
+      );
+
+      const data = await response.json();
+      console.log("Update Profile Response:", data);
+
+      if (data.status === "1" || data.status === 1 || data.status === true) {
+        alert("✅ Account created successfully!");
+
+        // Update local storage
+        localStorage.setItem("user_name", `${form.firstName} ${form.lastName}`);
+        localStorage.setItem("user_email", form.email);
+        localStorage.setItem("isLoggedIn", "true");
+
+        router.push("/home");
+      } else {
+        alert(data.message || "Something went wrong. Please try again.");
+      }
+    } catch (error) {
+      console.error("Profile Update Error:", error);
+      alert("Network error. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
-    <header className='header'>
-        <button type='button' className='icon_only' onClick={handleButtonClick}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M15 6L9 12L15 18" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+      {/* Header */}
+      <header className="header">
+        <button type="button" className="icon_only" onClick={handleButtonClick}>
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M15 6L9 12L15 18"
+              stroke="black"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
-    </header>
-    <section className='pageWrapper hasHeader'>
-      <div className="pageContainer">
-      <div className={styles.loginWrapper}>
-        <div className="logoArea mb-auto">
-          <Image alt="Liquidity Logo" src={logo} />
-        </div>
-        <div className={`${styles.loginForm}`}>
-            <h3>Create Account</h3>
-            <p>Help us get to know you better</p>
-            <div className="grid grid-cols-1 mt-7 gap-4">
-              <form onSubmit={handleVerify} className="space-y-4">
-                <input type="text" className={`${styles.textbox} rounded-lg`} placeholder='First Name' />
-                <input type="text" className={`${styles.textbox} rounded-lg`} placeholder='Last Name' />
+      </header>
+
+      {/* Page Wrapper */}
+      <section className="pageWrapper hasHeader">
+        <div className="pageContainer">
+          <div className={styles.loginWrapper}>
+            <div className="logoArea mb-auto">
+              <Image alt="Liquidity Logo" src={logo} />
+            </div>
+
+            <div className={styles.loginForm}>
+              <h3>Create Account</h3>
+              <p>Help us get to know you better</p>
+
+              <form onSubmit={handleVerify} className="space-y-4 mt-7">
+                <input
+                  type="text"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="First Name"
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  required
+                />
+                <input
+                  type="text"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="Last Name"
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  required
+                />
                 <DatePicker
                   selected={form.dob}
                   onChange={(date) => setForm({ ...form, dob: date })}
-                  dateFormat="dd/MM/yyyy"
+                  dateFormat="yyyy-MM-dd"
                   placeholderText="Date of Birth"
-                  maxDate={minAgeDate} // Restrict future dates beyond 18 years
+                  maxDate={minAgeDate}
                   showYearDropdown
                   scrollableYearDropdown
                   className={`${styles.textbox} rounded-lg`}
                 />
-                <input type="email" className={`${styles.textbox} rounded-lg`} placeholder='Email' />
-                <input type="tel" className={`${styles.textbox} rounded-lg`} placeholder='Phone Number' />
-                <input type="password" className={`${styles.textbox} rounded-lg`} placeholder='Password' />
-                <input type="password" className={`${styles.textbox} rounded-lg`} placeholder='Confirm Password' />
-                <button type='submit' className='bg-primary px-3 py-3 rounded-lg w-full text-white'>Create Account</button>
+                <input
+                  type="email"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="Email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                />
+                <input
+                  type="tel"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="Phone Number"
+                  value={form.phone}
+                  readOnly
+                />
+                <input
+                  type="password"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="Password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+                <input
+                  type="password"
+                  className={`${styles.textbox} rounded-lg`}
+                  placeholder="Confirm Password"
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                  required
+                />
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-primary px-3 py-3 rounded-lg w-full text-white"
+                >
+                  {loading ? "Creating..." : "Create Account"}
+                </button>
               </form>
-              <p className='text-center'>or</p>
-              <button type='submit' className={`${styles.loginButton} border flex items-center gap-6 border-gray-900 px-3 py-3 rounded-lg w-full text-gray-900`}>
+
+              <p className="text-center">or</p>
+
+              <button
+                type="button"
+                className={`${styles.loginButton} border flex items-center gap-6 border-gray-900 px-3 py-3 rounded-lg w-full text-gray-900`}
+              >
                 <Image src={google} alt="" width={20} height={20} />
                 <span>Sign in with Google</span>
               </button>
             </div>
+          </div>
         </div>
-      </div>
-      </div>
       </section>
-    </>   
+    </>
   );
 }

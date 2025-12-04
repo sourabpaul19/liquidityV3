@@ -31,6 +31,7 @@
     "react-datepicker": "^8.7.0",
     "react-dom": "^19.1.0",
     "react-feather": "^2.0.10",
+    "react-hot-toast": "^2.6.0",
     "react-pdf": "^10.1.0",
     "sass": "^1.89.2",
     "swiper": "^11.2.10"

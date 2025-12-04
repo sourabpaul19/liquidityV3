@@ -1,0 +1,42 @@
+import { NextResponse } from "next/server";
+
+export async function POST(req: Request) {
+  try {
+    // Read URL-encoded body from frontend
+    const text = await req.text();
+    const params = new URLSearchParams(text);
+
+    // Send to Liquidity backend as x-www-form-urlencoded
+    const backendRes = await fetch(
+      "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json, text/plain, */*",
+        },
+        body: params.toString(),
+      }
+    );
+
+    const responseText = await backendRes.text();
+
+    // Try parse JSON safely
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return NextResponse.json(
+        { status: "0", message: "Backend returned non-JSON", raw: responseText },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json(
+      { status: "0", message: "Error in API", error: err.message },
+      { status: 500 }
+    );
+  }
+}
