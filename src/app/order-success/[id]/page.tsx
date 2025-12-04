@@ -16,10 +16,10 @@ interface OrderProduct {
   id: string;
   product_name: string;
   quantity: number;
-  size?: string;
-  mixer_name?: string;
-  additional_shots?: number;
-  special_instructions?: string;
+  unit: string;
+  choice_of_mixer_name?: string;
+  shot_count?: string;
+  special_instruction?: string;
 }
 
 interface Order {
@@ -151,17 +151,17 @@ export default function OrderSuccess() {
               {order.products?.map((p) => (
                 <div key={p.id} className="py-4 border-b border-gray-200">
                   <h5>
-                    {p.quantity} X {p.product_name} <span>({p.size || "1oz"})</span>
+                    {p.quantity} X {p.product_name} <span>({p.unit || "1oz"})</span>
                   </h5>
 
                   <p>
-                    Mixer Name :<span> {p.mixer_name || "N/A"}</span>
+                    Mixer Name :<span> {p.choice_of_mixer_name || "N/A"}</span>
                     <br />
                     Additional Shots :
-                    <span> {p.additional_shots ?? 0}</span>
+                    <span> {p.shot_count ?? 0}</span>
                     <br />
                     Special Instruction :
-                    <span> {p.special_instructions || "—"}</span>
+                    <span> {p.special_instruction || "—"}</span>
                   </p>
                 </div>
               ))}

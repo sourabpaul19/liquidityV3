@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export async function POST(req) {
+export async function POST(req: { json: () => any; }) {
   try {
     const body = await req.json();
 
@@ -12,7 +12,7 @@ export async function POST(req) {
     form.append("tips_amount", body.tips_amount);
     form.append("payment_method", body.payment_method);
 
-    body.cart_items.forEach((item, index) => {
+    body.cart_items.forEach((item: { product_id: string | Blob; quantity: string | Blob; price: string | Blob; mixer_id: string | Blob; addon_id: string | Blob; }, index: any) => {
       form.append(`cart_items[${index}][product_id]`, item.product_id);
       form.append(`cart_items[${index}][quantity]`, item.quantity);
       form.append(`cart_items[${index}][price]`, item.price);

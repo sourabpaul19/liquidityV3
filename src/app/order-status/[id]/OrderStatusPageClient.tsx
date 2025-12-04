@@ -15,10 +15,10 @@ interface OrderProduct {
   id: string;
   quantity: string;
   product_name: string;
-  size: string;
-  mixer_name?: string;
-  additional_shots?: string;
-  special_instructions?: string;
+  unit: string;
+  choice_of_mixer_name?: string;
+  shot_count?: string;
+  special_instruction?: string;
 }
 
 interface OrderData {
@@ -188,16 +188,16 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
               {order.products?.map((p) => (
                 <div key={p.id} className="py-4 border-b border-gray-200">
                   <h5>
-                    {p.quantity} X {p.product_name} <span>({p.size})</span>
+                    {p.quantity} X {p.product_name} <span>({p.unit})</span>
                   </h5>
 
                   <p>
-                    Mixer Name: <span>{p.mixer_name || "N/A"}</span>
+                    Mixer Name: <span>{p.choice_of_mixer_name || "N/A"}</span>
                     <br />
-                    Additional Shots: <span>{p.additional_shots || 0}</span>
+                    Additional Shots: <span>{p.shot_count || 0}</span>
                     <br />
                     Special Instruction:{" "}
-                    <span>{p.special_instructions || "—"}</span>
+                    <span>{p.special_instruction || "—"}</span>
                   </p>
                 </div>
               ))}
