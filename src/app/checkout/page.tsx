@@ -50,10 +50,10 @@ export default function Checkout() {
   };
 
   // Retrieve guest cart from localStorage
-  const getLocalCart = (): any[] => {
+  const getLocalCart = (): CartItem[] => {
     if (typeof window === "undefined") return [];
     try {
-      return JSON.parse(localStorage.getItem("local_cart") || "[]");
+      return JSON.parse(localStorage.getItem("local_cart") || "[]") as CartItem[];
     } catch {
       return [];
     }
@@ -65,45 +65,43 @@ export default function Checkout() {
   };
 
   // API call to add multiple cart items for user on backend
-  const addGuestCartToBackend = async (items: any[]) => {
-  try {
-    const payload = {
-      user_id: userId,
-      device_id: deviceId,
-      cart_items: items,
-    };
+  const addGuestCartToBackend = async (items: CartItem[]) => {
+    try {
+      const payload = {
+        user_id: userId,
+        device_id: deviceId,
+        cart_items: items,
+      };
 
-    const response = await fetch("/api/cartProxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      const response = await fetch("/api/cartProxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (response.ok && (data.status === "1" || data.success)) {
-      console.log("Cart items successfully added to backend via proxy.");
-      return data;
-    } else {
-      console.warn("Failed to add cart items via proxy:", data);
-      return data;
+      if (response.ok && (data.status === "1" || data.success)) {
+        console.log("Cart items successfully added to backend via proxy.");
+        return data;
+      } else {
+        console.warn("Failed to add cart items via proxy:", data);
+        return data;
+      }
+    } catch (error) {
+      console.error("Error calling proxy API:", error);
+      return { success: false, message: "Network or proxy error" };
     }
-  } catch (error) {
-    console.error("Error calling proxy API:", error);
-    return { success: false, message: "Network or proxy error" };
-  }
-};
-
-
+  };
 
   // API call to fetch updated cart details from backend
   const fetchBackendCartDetails = async () => {
     try {
       const response = await fetch("/api/getBackendCart", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ user_id: userId, device_id: deviceId }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, device_id: deviceId }),
+      });
 
       const data = await response.json();
       if (data && Array.isArray(data.cartItems)) {
@@ -217,7 +215,6 @@ export default function Checkout() {
           <div className={styles.billingArea}>
             <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
 
-            {/* Example static billing summary. Replace with dynamic values as needed */}
             <div className={styles.billingItem}><p>Subtotal</p><p>$ 17.95</p></div>
             <div className={styles.billingItem}><p>Liquidity Cash</p><p>-$ 0.44</p></div>
             <div className={styles.billingItem}><p>Service Fee</p><p>$ 1.00</p></div>
@@ -226,8 +223,6 @@ export default function Checkout() {
 
             <CardSelector cards={cards} onSelect={handleCardSelect} defaultCardId="1" />
           </div>
-
-          {/* <TipsSelector /> */}
 
           <div className={styles.bottomArea}>
             <form onSubmit={handleVerify}>
