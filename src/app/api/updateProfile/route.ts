@@ -4,7 +4,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // Map frontend `id` to backend expected `id`
+    // Convert to URL-encoded params
     const params = new URLSearchParams();
     Object.entries(body).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
@@ -26,7 +26,6 @@ export async function POST(request: Request) {
 
     const text = await res.text();
 
-    // Try parsing JSON; fallback if backend sends HTML error
     let data;
     try {
       data = JSON.parse(text);
@@ -35,10 +34,14 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Proxy failed:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown server error";
+
     return NextResponse.json(
-      { status: 0, message: "Proxy failed", error: error.message },
+      { status: 0, message: "Proxy failed", error: message },
       { status: 500 }
     );
   }

@@ -33,9 +33,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+
     return NextResponse.json(
-      { status: "0", message: "Error in API", error: err.message },
+      { status: "0", message: "Error in API", error: message },
       { status: 500 }
     );
   }

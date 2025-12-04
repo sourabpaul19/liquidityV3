@@ -15,7 +15,7 @@ export async function POST(req: Request) {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          "Accept": "application/json",
+          Accept: "application/json",
         },
         body: formData.toString(),
         cache: "no-store",
@@ -38,9 +38,11 @@ export async function POST(req: Request) {
 
     const data = JSON.parse(text);
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+
     return NextResponse.json(
-      { status: 0, message: "Proxy failed", error: error.message || "Unknown error" },
+      { status: 0, message: "Proxy failed", error: message },
       { status: 500 }
     );
   }

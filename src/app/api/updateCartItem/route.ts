@@ -1,33 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Example: using a mock database (replace with your actual DB logic)
-let cartDB: { id: string; quantity: number }[] = []; // your cart items
+const cartDB: { id: string; quantity: number }[] = [];
 
 export async function POST(req: NextRequest) {
   try {
-    const { itemId, quantity } = await req.json();
-
-    if (!itemId || typeof quantity !== "number") {
+    // Safe JSON parsing
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
       return NextResponse.json(
-        { status: "0", message: "Invalid data" },
+        { status: "0", message: "Invalid JSON body" },
         { status: 400 }
       );
     }
 
-    // Example: update item in "cartDB"
-    const itemIndex = cartDB.findIndex((i) => i.id === itemId);
-    if (itemIndex > -1) {
-      cartDB[itemIndex].quantity = quantity;
-    } else {
-      // if item not found, add it
-      cartDB.push({ id: itemId, quantity });
+    // Validate body is object
+    if (typeof body !== "object" || body === null) {
+      return NextResponse.json(
+        { status: "0", message: "Invalid request body" },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ status: "1", message: "Cart updated" });
-  } catch (err) {
-    console.error(err);
+    const { itemId, quantity } = body as {
+      itemId?: string;
+      quantity?: number | string;
+    };
+
+    const quantityNum = Number(quantity);
+
+    if (!itemId || isNaN(quantityNum) || quantityNum < 0) {
+      return NextResponse.json(
+        { status: "0", message: "Invalid itemId or quantity" },
+        { status: 400 }
+      );
+    }
+
+    // UPDATE in cartDB
+    const index = cartDB.findIndex((i) => i.id === itemId);
+
+    if (index > -1) {
+      cartDB[index].quantity = quantityNum;
+    } else {
+      cartDB.push({ id: itemId, quantity: quantityNum });
+    }
+
     return NextResponse.json(
-      { status: "0", message: "Server error" },
+      { status: "1", message: "Cart updated", cartDB },
+      { status: 200 }
+    );
+
+  } catch (err: unknown) {
+    console.error("SERVER ERROR:", err);
+    return NextResponse.json(
+      { status: "0", message: "Internal Server Error" },
       { status: 500 }
     );
   }

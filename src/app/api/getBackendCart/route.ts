@@ -43,10 +43,14 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Proxy API Error:", err);
+
+    const message =
+      err instanceof Error ? err.message : "Internal Server Error";
+
     return NextResponse.json(
-      { message: "Internal Server Error" },
+      { message },
       { status: 500 }
     );
   }

@@ -11,12 +11,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Convert JSON to URL-encoded form data (your backend expects this)
+    // Convert JSON to URL-encoded form data
     const formBody = new URLSearchParams({
-      mobile: body.mobile, // e.g. +15555555555
+      mobile: body.mobile,
     }).toString();
 
-    // Send request to your backend
+    // Send request to backend
     const apiResponse = await fetch(
       "https://liquiditybars.com/canada/backend/admin/api/loginWithOtp",
       {
@@ -31,10 +31,14 @@ export async function POST(request: Request) {
     const data = await apiResponse.json();
 
     return NextResponse.json(data, { status: apiResponse.status });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Proxy error:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Server error";
+
     return NextResponse.json(
-      { success: false, message: "Server error", error: error.message },
+      { success: false, message, error: message },
       { status: 500 }
     );
   }
