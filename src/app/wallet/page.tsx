@@ -9,20 +9,28 @@ import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigat
 import Header from '@/components/common/Header/Header';
 import Modal from '@/components/common/Modal/Modal';
 
+// -------------------------
+// ✅ Transaction Type
+// -------------------------
+interface Transaction {
+  type: string;           // "1" or "2"
+  credit_type?: string;   // "1" | "2"
+  amount: string;
+  date_time: string;
+}
+
 export default function Wallet() {
   const [open, setOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]); // ✅ FIXED
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [addAmount, setAddAmount] = useState<string>(""); // ✅ Input value
+  const [addAmount, setAddAmount] = useState<string>("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedId = localStorage.getItem('user_id');
-      setUserId(storedId);
-    }
+    const storedId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
+    setUserId(storedId);
   }, []);
 
   useEffect(() => {
@@ -39,7 +47,6 @@ export default function Wallet() {
         if (data.status === "1") {
           setWalletBalance(Number(data.wallet_balance));
           setTransactions(data.wallets || []);
-
           localStorage.setItem('wallet_balance', data.wallet_balance);
           localStorage.setItem('wallet_transactions', JSON.stringify(data.wallets || []));
         } else {
@@ -63,18 +70,19 @@ export default function Wallet() {
     return { date, time };
   };
 
-  const getTransactionLabel = (txn: any) => {
+  // -------------------------
+  // ✅ Updated param type: Transaction
+  // -------------------------
+  const getTransactionLabel = (txn: Transaction) => {
     if (txn.type === "1") {
       if (txn.credit_type === "1") return "Online Payment";
       if (txn.credit_type === "2") return "Referral Bonus";
       return "Wallet Credit";
-    } else if (txn.type === "2") {
-      return "Wallet Deduction";
     }
+    if (txn.type === "2") return "Wallet Deduction";
     return "Transaction";
   };
 
-  // ✅ Add Wallet Balance Function
   const handleAddBalance = async () => {
     if (!userId || !addAmount || isNaN(Number(addAmount))) {
       alert("Please enter a valid amount");
@@ -84,25 +92,27 @@ export default function Wallet() {
     setAdding(true);
 
     try {
-      
-
       const res = await fetch("/api/addWalletBalance", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ user_id: userId, amount: Number(addAmount) }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, amount: Number(addAmount) }),
+      });
 
       const data = await res.json();
       console.log("Add Wallet Response:", data);
 
-      if (data.status === "1" || data.status === 1) {
-        alert("✅ Wallet balance added successfully!");
+      if (data.status === "1") {
+        alert("Wallet balance added successfully!");
+
         setWalletBalance(prev => prev + Number(addAmount));
 
-        // Optionally update transactions list if returned
         if (data.wallets) setTransactions(data.wallets);
 
-        localStorage.setItem('wallet_balance', (walletBalance + Number(addAmount)).toString());
+        localStorage.setItem(
+          'wallet_balance',
+          (walletBalance + Number(addAmount)).toString()
+        );
+
         setOpen(false);
         setAddAmount("");
       } else {

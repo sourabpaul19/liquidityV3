@@ -31,6 +31,13 @@ interface OTPResponse {
   user?: UserData;
 }
 
+interface AddCartResponse {
+  status: string | number | boolean;
+  message?: string;
+  success?: boolean;
+  [key: string]: unknown;
+}
+
 export default function OTPVerify() {
   const router = useRouter();
   const params = useSearchParams();
@@ -71,7 +78,7 @@ export default function OTPVerify() {
     userId: string,
     deviceId: string,
     items: CartItem[]
-  ): Promise<any> => {
+  ): Promise<AddCartResponse | null> => {
     try {
       const payload = {
         user_id: userId,
@@ -88,7 +95,8 @@ export default function OTPVerify() {
         }
       );
 
-      return await res.json();
+      const data: AddCartResponse = await res.json();
+      return data;
     } catch (err) {
       console.error("Error adding multiple cart items:", err);
       return null;
@@ -134,11 +142,11 @@ export default function OTPVerify() {
           return;
         }
 
+        const user = data.user;
+
         // ------------------------------
         // SAVE USER SESSION
         // ------------------------------
-        const user = data.user;
-
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("user_id", user.id || "");
         localStorage.setItem("user_name", user.name || "");
