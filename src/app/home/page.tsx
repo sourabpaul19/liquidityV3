@@ -15,29 +15,53 @@ import { Star, Heart, SlidersHorizontal, MapPinned } from 'lucide-react';
 import Link from 'next/link';
 import Modal from '@/components/common/Modal/Modal';
 
+// -------------------------------
+// 🟦 Custom Types
+// -------------------------------
+interface Banner {
+  id: number;
+  image: string;
+}
+
+interface Shop {
+  id: number;
+  name: string;
+  address: string;
+  image: string;
+  rating: number;
+}
+
+interface Order {
+  id: number;
+  status: number;
+}
+
+// --------------------------------
+// 🟦 Component
+// --------------------------------
 export default function HomePage() {
   const router = useRouter();
 
-  // ✅ State variables
+  // State
   const [loading, setLoading] = useState(true);
-  const [banners, setBanners] = useState<any[]>([]);
-  const [subCategories, setSubCategories] = useState<any[]>([]);
-  const [shops, setShops] = useState<any[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [shops, setShops] = useState<Shop[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [showDistanceModal, setShowDistanceModal] = useState(false);
-  const [selectedDistance, setSelectedDistance] = useState<{ id: number; name: string } | null>(null);
   const [tempSelectedDistance, setTempSelectedDistance] = useState<{ id: number; name: string } | null>(null);
 
-  const [ongoingOrder, setOngoingOrder] = useState<any | null>(null);
+  const [ongoingOrder, setOngoingOrder] = useState<Order | null>(null);
 
-  // ✅ Fetch Dashboard Data
+  // --------------------------------
+  // 🟦 Fetch Dashboard + Orders
+  // --------------------------------
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         const userId = localStorage.getItem('user_id');
         if (!userId) {
-          router.push('/'); // redirect to login if not found
+          router.push('/');
           return;
         }
 
@@ -49,27 +73,26 @@ export default function HomePage() {
         const dashboardData = await dashboardRes.json();
         const orderData = await orderRes.json();
 
-        // ✅ Dashboard data
+        // Dashboard data
         if (dashboardData.status === '1' || dashboardData.status === 1) {
           setBanners(dashboardData.banners || []);
-          setSubCategories(dashboardData.sub_categories || []);
           setShops(dashboardData.shops || []);
 
-          // Save shops to localStorage
-          if (dashboardData.shops && dashboardData.shops.length > 0) {
+          if (dashboardData.shops?.length > 0) {
             localStorage.setItem('shops', JSON.stringify(dashboardData.shops));
           }
         } else {
           setError(dashboardData.message || 'Failed to load data');
         }
 
-        // ✅ Ongoing order
-        if (orderData.status === '1' && orderData.orders && orderData.orders.length > 0) {
-          // Pick the first order with status 0, 1, or 2
+        // Active order
+        if (orderData.status === '1' && Array.isArray(orderData.orders)) {
           const activeOrder = orderData.orders.find(
-            (o: any) => [0, 1, 2].includes(Number(o.status))
+            (o: Order) => [0, 1, 2].includes(Number(o.status))
           );
-          if (activeOrder) setOngoingOrder(activeOrder);
+          if (activeOrder) {
+            setOngoingOrder(activeOrder);
+          }
         }
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -82,22 +105,17 @@ export default function HomePage() {
     fetchDashboardData();
   }, [router]);
 
-  // ✅ Distance selector modal handlers
-  const handleDistanceSelect = (distance: { id: number; name: string }) => {
-    setSelectedDistance(distance);
-    setShowDistanceModal(false);
-  };
-
-  const handleRemoveDistance = () => {
-    setSelectedDistance(null);
-  };
-
-  // ✅ Save selected shop and navigate
-  const handleSelectShop = (shop: any) => {
+  // --------------------------------
+  // 🟦 Store selected shop
+  // --------------------------------
+  const handleSelectShop = (shop: Shop) => {
     localStorage.setItem('selected_shop', JSON.stringify(shop));
     router.push(`/bars/${shop.id}`);
   };
 
+  // --------------------------------
+  // 🟦 Loading / Error UI
+  // --------------------------------
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -125,11 +143,11 @@ export default function HomePage() {
       <Header buttonType="menu" />
       <section className="pageWrapper hasHeader hasFooter hasBottomNav">
         <div className="pageContainer py-4">
-          {/* ✅ Banner Slider */}
+
+          {/* 🟦 Banner Slider */}
           {banners.length > 0 && (
             <Swiper
               modules={[Thumbs, Navigation, Autoplay]}
-              pagination={{ clickable: true }}
               autoplay={{ delay: 3000 }}
               loop={false}
               spaceBetween={16}
@@ -137,7 +155,7 @@ export default function HomePage() {
                 320: { slidesPerView: 1.05 },
                 640: { slidesPerView: 2.2 },
                 768: { slidesPerView: 3.3 },
-                1024: { slidesPerView: 3.3 },
+                1024: { slidesPerView: 3.3 }
               }}
               className={styles.bannerSlider}
             >
@@ -145,13 +163,7 @@ export default function HomePage() {
                 <SwiperSlide key={banner.id}>
                   <div className="relative overflow-hidden rounded-xl shadow-md">
                     <figure className={styles.bannerImage}>
-                      <Image
-                        src={banner.image}
-                        alt="Banner"
-                        fill
-                        sizes="100vw"
-                        priority
-                      />
+                      <Image src={banner.image} alt="Banner" fill sizes="100vw" priority />
                     </figure>
                   </div>
                 </SwiperSlide>
@@ -160,23 +172,22 @@ export default function HomePage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 px-4">
-            <Link href='/cart' className='bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white'>
+            <Link href="/cart" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
               Ongoing and Past Orders
             </Link>
           </div>
 
-          {/* ✅ Bars / Shops Section */}
+          {/* 🟦 Bars Section */}
           <div className="container-fluid mt-6">
+
             <div className="sectionHeading flex justify-between items-center">
               <h4 className="section_title">Bars</h4>
-              <button
-                className={styles.mixerButton}
-                onClick={() => setShowDistanceModal(true)}
-              >
+              <button className={styles.mixerButton} onClick={() => setShowDistanceModal(true)}>
                 <SlidersHorizontal size={20} />
               </button>
             </div>
 
+            {/* 🟦 Distance Modal */}
             <Modal
               isOpen={showDistanceModal}
               onClose={() => setShowDistanceModal(false)}
@@ -187,9 +198,7 @@ export default function HomePage() {
                   <MapPinned size={20} />
                   <span className="text-sm font-medium">
                     Select Distance:{' '}
-                    <strong>
-                      {tempSelectedDistance ? `${tempSelectedDistance.name}` : '0'} km
-                    </strong>
+                    <strong>{tempSelectedDistance ? `${tempSelectedDistance.name}` : '0'} km</strong>
                   </span>
                 </div>
 
@@ -197,7 +206,6 @@ export default function HomePage() {
                   type="range"
                   min="1"
                   max="100"
-                  step="1"
                   value={tempSelectedDistance?.id || 0}
                   onChange={(e) =>
                     setTempSelectedDistance({
@@ -212,26 +220,20 @@ export default function HomePage() {
                   <span>1 km</span>
                   <span>100 km</span>
                 </div>
-              </div>
 
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg"
-                  onClick={() => setShowDistanceModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="bg-primary text-white px-4 py-2 rounded-lg"
-                  onClick={() => {
-                    if (tempSelectedDistance) {
-                      setSelectedDistance(tempSelectedDistance);
+                <div className="mt-6 flex justify-end gap-3">
+                  <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg" onClick={() => setShowDistanceModal(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                    onClick={() => {
                       setShowDistanceModal(false);
-                    }
-                  }}
-                >
-                  Confirm
-                </button>
+                    }}
+                  >
+                    Confirm
+                  </button>
+                </div>
               </div>
             </Modal>
 
@@ -240,13 +242,7 @@ export default function HomePage() {
                 {shops.map((shop) => (
                   <article key={shop.id} onClick={() => handleSelectShop(shop)} className="cursor-pointer">
                     <figure className={styles.barImage}>
-                      <Image
-                        src={shop.image}
-                        alt={shop.name}
-                        fill
-                        sizes="100vw"
-                        className="rounded-xl object-cover"
-                      />
+                      <Image src={shop.image} alt={shop.name} fill sizes="100vw" className="rounded-xl object-cover" />
                     </figure>
                     <figcaption className={styles.barContent}>
                       <div className={styles.left}>
@@ -269,11 +265,11 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ✅ Dynamic sticky order banner */}
+        {/* 🟦 Sticky Active Order */}
         {ongoingOrder && (
           <Link href={`/order-status/${ongoingOrder.id}`} className={styles.stickyMessage}>
             <p>You have an Order In-Progress. Click to see your order status.</p>
-            <div className={`${styles.progressLayer}`}>
+            <div className={styles.progressLayer}>
               <div className={styles.progressBar}></div>
             </div>
           </Link>

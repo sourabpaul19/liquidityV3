@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../order-status.module.scss";
 import Image from "next/image";
@@ -8,14 +8,37 @@ import statusImg from "../../../../public/images/status.png";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import Link from "next/link";
 
-export default function OrderStatusPage({ params }: any) {
-  const router = useRouter();
+// ------------------------------------------
+// TYPES
+// ------------------------------------------
+interface OrderProduct {
+  id: string;
+  quantity: string;
+  product_name: string;
+  size: string;
+  mixer_name?: string;
+  additional_shots?: string;
+  special_instructions?: string;
+}
 
-  // ✅ NEW FIX: unwrap params (Next.js 2025 update)
+interface OrderData {
+  status: string;
+  is_ready: string;
+  products?: OrderProduct[];
+}
+
+interface OrderStatusProps {
+  params: {
+    id: string;
+  };
+}
+
+export default function OrderStatusPage({ params }: OrderStatusProps) {
+  const router = useRouter();
   const { id } = params;
 
   const [loading, setLoading] = useState(true);
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<OrderData | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -27,13 +50,11 @@ export default function OrderStatusPage({ params }: any) {
         );
         const data = await res.json();
 
-        if (data.status == "1" && data.order) {
+        if (data.status === "1" && data.order) {
           setOrder(data.order);
         } else {
           setOrder(null);
         }
-      } catch (e) {
-        setOrder(null);
       } finally {
         setLoading(false);
       }
@@ -60,7 +81,7 @@ export default function OrderStatusPage({ params }: any) {
     );
   }
 
-  if (order.status !== "1" && order.status !== "2") {
+  if (order.status !== "1" && order.status !== "2" && order.status !== "0") {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
@@ -98,44 +119,53 @@ export default function OrderStatusPage({ params }: any) {
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
+            
+            {/* ------------------------------ */}
+            {/* UPDATED STATUS TITLE MESSAGES */}
+            {/* ------------------------------ */}
             <h4 className="text-center mb-2">
-  {order.status === "0" && "The Bar Has Received Your Order!"}
-  {order.status === "2" && order.is_ready === "0" && "The Bar is Preparing Your Order!"}
-  {order.status === "2" && order.is_ready === "1" && "Your order is ready for pickup!"}
-</h4>
+              {order.status === "0" && "Your order was placed successfully!"}
+              {order.status === "2" && order.is_ready === "0" && "The Bar is Preparing Your Order!"}
+              {order.status === "2" && order.is_ready === "1" && "Your order is ready for pickup!"}
+            </h4>
 
             <h5 className="text-center">Please wait near the bar</h5>
 
+            {/* Progress Steps */}
             <div className={styles.progress}>
-  {/* Step 1: Order Received */}
-  <div className={`${styles.progressLayer} ${styles.completed}`}>
-    <div className={styles.progressBar}></div>
-  </div>
+              {/* Step 1: Order Received */}
+              <div className={`${styles.progressLayer} ${styles.animated}`}>
+                <div className={styles.progressBar}></div>
+              </div>
 
-  {/* Step 2: Preparing */}
-  <div
-    className={`${styles.progressLayer} ${
-      order.status === "2" && order.is_ready === "0" ? styles.completed : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
+              {/* Step 2: Preparing */}
+              <div
+                className={`${styles.progressLayer} ${
+                  order.status === "2" && order.is_ready === "0"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
 
-  {/* Step 3: Ready for Pickup */}
-  <div
-    className={`${styles.progressLayer} ${
-      order.status === "2" && order.is_ready === "1" ? styles.completed : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
-</div>
-
+              {/* Step 3: Ready */}
+              <div
+                className={`${styles.progressLayer} ${
+                  order.status === "2" && order.is_ready === "1"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
+            </div>
 
             <div className={styles.successIcon}>
               <Image src={statusImg} alt="" fill />
             </div>
 
+            {/* Order Items */}
             <div className={styles.orderDetails}>
               <h4 className="mb-2">Estimated order completion time</h4>
               <p className="flex gap-3">
@@ -144,7 +174,7 @@ export default function OrderStatusPage({ params }: any) {
 
               <h4 className="mt-4">Order Details</h4>
 
-              {order.products?.map((p: any) => (
+              {order.products?.map((p) => (
                 <div
                   key={p.id}
                   className="py-4 border-b border-gray-200"
@@ -155,12 +185,12 @@ export default function OrderStatusPage({ params }: any) {
                   </h5>
 
                   <p>
-                    Mixer Name :<span> {p.mixer_name || "N/A"}</span>
+                    Mixer Name: <span>{p.mixer_name || "N/A"}</span>
                     <br />
-                    Additional Shots :
+                    Additional Shots:
                     <span> {p.additional_shots || 0}</span>
                     <br />
-                    Special Instruction :
+                    Special Instruction:
                     <span> {p.special_instructions || "—"}</span>
                   </p>
                 </div>
