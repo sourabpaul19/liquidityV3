@@ -1,9 +1,35 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import styles from "./otp.module.scss";
 import toast from "react-hot-toast";
+
+// ----------------------
+// TYPES
+// ----------------------
+interface CartItem {
+  product_id: string;
+  qty: number;
+  price?: number;
+  mixer_id?: string;
+  mixer_qty?: number;
+  [key: string]: string | number | undefined;
+}
+
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  mobile: string;
+  dob?: string;
+}
+
+interface OTPResponse {
+  status: string | number | boolean;
+  message?: string;
+  user?: UserData;
+}
 
 export default function OTPVerify() {
   const router = useRouter();
@@ -13,33 +39,39 @@ export default function OTPVerify() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Get mobile number from URL or localStorage
   useEffect(() => {
     const phoneParam = params.get("phone");
     const savedMobile = localStorage.getItem("user_mobile");
+
     if (phoneParam) setMobile(phoneParam);
     else if (savedMobile) setMobile(savedMobile);
   }, [params]);
 
-  const handleButtonClick = () => {
-    router.back();
-  };
+  // Go back
+  const handleButtonClick = () => router.back();
 
-  // Read guest cart from localStorage
-  const getLocalCart = () => {
+  // -------------------------------
+  // GUEST CART HELPERS
+  // -------------------------------
+  const getLocalCart = (): CartItem[] => {
     try {
-      return JSON.parse(localStorage.getItem("cart") || "[]");
+      return JSON.parse(localStorage.getItem("cart") || "[]") as CartItem[];
     } catch {
       return [];
     }
   };
 
-  // Clear guest cart from localStorage
   const clearLocalCart = () => {
     localStorage.removeItem("cart");
   };
 
-  // Send guest cart items to backend API to add them to user cart
-  const addGuestCartToBackend = async (userId: string, deviceId: string, items: any[]) => {
+  // Send guest cart items to backend
+  const addGuestCartToBackend = async (
+    userId: string,
+    deviceId: string,
+    items: CartItem[]
+  ): Promise<any> => {
     try {
       const payload = {
         user_id: userId,
@@ -56,15 +88,17 @@ export default function OTPVerify() {
         }
       );
 
-      const data = await res.json();
-      return data;
+      return await res.json();
     } catch (err) {
       console.error("Error adding multiple cart items:", err);
       return null;
     }
   };
 
-  const handleVerify = async (e: { preventDefault: () => void }) => {
+  // -------------------------------
+  // VERIFY OTP
+  // -------------------------------
+  const handleVerify = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!mobile || !otp) {
@@ -88,7 +122,7 @@ export default function OTPVerify() {
         }
       );
 
-      const data = await response.json();
+      const data: OTPResponse = await response.json();
       console.log("OTP Verify Response:", data);
 
       if (data.status === "1" || data.status === 1 || data.status === true) {
@@ -100,32 +134,38 @@ export default function OTPVerify() {
           return;
         }
 
-        // Save user info
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("user_id", data.user.id || "");
-        localStorage.setItem("user_name", data.user.name || "");
-        localStorage.setItem("user_email", data.user.email || "");
-        localStorage.setItem("user_mobile", data.user.mobile || mobile);
-        localStorage.setItem("user_dob", data.user.dob || "");
-        localStorage.setItem("userData", JSON.stringify(data.user));
+        // ------------------------------
+        // SAVE USER SESSION
+        // ------------------------------
+        const user = data.user;
 
-        // STEP 1: Check guest cart from localStorage
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("user_id", user.id || "");
+        localStorage.setItem("user_name", user.name || "");
+        localStorage.setItem("user_email", user.email || "");
+        localStorage.setItem("user_mobile", user.mobile || mobile);
+        localStorage.setItem("user_dob", user.dob || "");
+        localStorage.setItem("userData", JSON.stringify(user));
+
+        // ------------------------------
+        // MOVE GUEST CART TO BACKEND
+        // ------------------------------
         const guestCart = getLocalCart();
 
         if (guestCart.length > 0) {
           toast.loading("Adding items to your cart...");
 
-          // STEP 2: Send guest cart items to backend cart API
           const deviceId = localStorage.getItem("device_id") || "";
-          const addCartRes = await addGuestCartToBackend(data.user.id, deviceId, guestCart);
+
+          const addCartRes = await addGuestCartToBackend(
+            user.id,
+            deviceId,
+            guestCart
+          );
 
           if (addCartRes && (addCartRes.status === "1" || addCartRes.success)) {
             toast.success("Items added to your cart!");
-
-            // STEP 3: Clear local guest cart
             clearLocalCart();
-
-            // STEP 4: Redirect to cart or checkout page
             router.push("/checkout");
             return;
           } else {
@@ -133,8 +173,10 @@ export default function OTPVerify() {
           }
         }
 
-        // No guest cart, redirect based on user name presence
-        if (!data.user.name || data.user.name.trim() === "") {
+        // ------------------------------
+        // REDIRECT BASED ON PROFILE
+        // ------------------------------
+        if (!user.name || user.name.trim() === "") {
           router.push("/new-account");
         } else {
           router.push("/home");
@@ -150,17 +192,14 @@ export default function OTPVerify() {
     }
   };
 
+  // ===============================
+  //     UI
+  // ===============================
   return (
     <>
       <header className="header">
         <button type="button" className="icon_only" onClick={handleButtonClick}>
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path
               d="M15 6L9 12L15 18"
               stroke="black"
@@ -186,6 +225,7 @@ export default function OTPVerify() {
                 onChange={(e) => setOtp(e.target.value)}
                 required
               />
+
               <button
                 type="submit"
                 disabled={loading}

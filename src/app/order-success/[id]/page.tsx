@@ -9,20 +9,41 @@ import Link from "next/link";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 
+// -----------------------------------------
+// ✅ TYPES (Fixes all "any" errors)
+// -----------------------------------------
+interface OrderProduct {
+  id: string;
+  product_name: string;
+  quantity: number;
+  size?: string;
+  mixer_name?: string;
+  additional_shots?: number;
+  special_instructions?: string;
+}
+
+interface Order {
+  id: string;
+  outlet_slug?: string;
+  products?: OrderProduct[];
+}
+
+// -----------------------------------------
+
 export default function OrderSuccess() {
   const router = useRouter();
   const params = useParams();
-  const id = params.id; // dynamic route param
+  const id = params.id as string;
 
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Dynamic back to same outlet menu
+  // 🔹 Back button logic
   const handleBack = () => {
     if (order?.outlet_slug) {
       router.push(`/outlet-menu/${order.outlet_slug}`);
     } else {
-      router.push("/outlet-menu"); // fallback
+      router.push("/outlet-menu");
     }
   };
 
@@ -38,7 +59,7 @@ export default function OrderSuccess() {
         const data = await res.json();
 
         if (data.status === "1" && data.order) {
-          setOrder(data.order);
+          setOrder(data.order as Order);
         } else {
           setOrder(null);
         }
@@ -53,6 +74,7 @@ export default function OrderSuccess() {
     fetchOrder();
   }, [id]);
 
+  // 🔹 Loading UI
   if (loading) {
     return (
       <section className="pageWrapper hasHeader">
@@ -63,6 +85,7 @@ export default function OrderSuccess() {
     );
   }
 
+  // 🔹 If no order found
   if (!order) {
     return (
       <section className="pageWrapper hasHeader">
@@ -125,7 +148,7 @@ export default function OrderSuccess() {
 
               <h4 className="mt-4">Order Details</h4>
 
-              {order.products?.map((p: any) => (
+              {order.products?.map((p) => (
                 <div key={p.id} className="py-4 border-b border-gray-200">
                   <h5>
                     {p.quantity} X {p.product_name} <span>({p.size || "1oz"})</span>
@@ -135,7 +158,7 @@ export default function OrderSuccess() {
                     Mixer Name :<span> {p.mixer_name || "N/A"}</span>
                     <br />
                     Additional Shots :
-                    <span> {p.additional_shots || 0}</span>
+                    <span> {p.additional_shots ?? 0}</span>
                     <br />
                     Special Instruction :
                     <span> {p.special_instructions || "—"}</span>
