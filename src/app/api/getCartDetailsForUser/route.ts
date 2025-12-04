@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     );
 
     const text = await apiResponse.text();
+
     if (!apiResponse.ok) {
       console.error("Backend getCart failed:", apiResponse.status, text);
       return NextResponse.json(
@@ -38,7 +39,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If the backend somehow returned HTML instead of JSON
     if (text.trim().startsWith("<")) {
       return NextResponse.json(
         {
@@ -53,19 +53,24 @@ export async function POST(req: NextRequest) {
     let data;
     try {
       data = JSON.parse(text);
-    } catch (err) {
+    } catch {
       return NextResponse.json(
         { status: 0, message: "Invalid JSON from backend", raw: text },
         { status: 500 }
       );
     }
 
-    // Return the backend data as is (or you can normalize it)
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error("Error in getCart proxy:", error);
+
+  } catch (error: unknown) {
+    // Safe error extraction
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+
+    console.error("Error in getCart proxy:", message);
+
     return NextResponse.json(
-      { status: 0, message: "Internal server error" },
+      { status: 0, message: "Internal server error", error: message },
       { status: 500 }
     );
   }

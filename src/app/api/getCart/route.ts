@@ -16,19 +16,16 @@ export async function POST(req: Request) {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          "Accept": "application/json",              // 🔥 REQUIRED
+          Accept: "application/json",
         },
         body: formData.toString(),
         cache: "no-store",
       }
     );
 
-    // Raw response
     const text = await apiResponse.text();
-
     console.log("getCart response:", text);
 
-    // 🔥 If API sends HTML → send clean error
     if (!apiResponse.ok || text.trim().startsWith("<")) {
       return NextResponse.json(
         {
@@ -40,11 +37,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Safe JSON parse
     let data;
     try {
       data = JSON.parse(text);
-    } catch (err) {
+    } catch {
       return NextResponse.json(
         {
           status: 0,
@@ -55,15 +51,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // Success
     return NextResponse.json(data);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
 
-  } catch (error: any) {
     return NextResponse.json(
       {
         status: 0,
         message: "Proxy failed",
-        error: error?.message || "Unknown error",
+        error: message,
       },
       { status: 500 }
     );
