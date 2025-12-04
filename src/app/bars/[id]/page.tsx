@@ -14,48 +14,67 @@ import styles from "../bars.module.scss";
 const BACKEND_ADD_CART_URL =
   "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems";
 
-// ---------------- TYPES -----------------
-
-type Product = {
+// ----------------------------
+// 📌 TypeScript Interfaces
+// ----------------------------
+interface OrderProduct {
   id: string;
   product_name: string;
-  size?: string;
   price: string;
   quantity: string;
-  double_shot_price?: number;
+  size?: string;
+
+  // Optional mixer / addons
   is_double_shot?: boolean;
   extraShotQty?: number;
-  selectedMixer?: { name: string; price: number };
+  double_shot_price?: number;
+  selectedMixer?: {
+    name: string;
+    price: number;
+  } | null;
   specialInstructions?: string;
-};
+}
 
-type Order = {
+interface RecentOrder {
   id: string;
-  products: Product[];
   total_amount?: number;
   amount?: number;
-};
+  products: OrderProduct[];
+}
 
-type Shop = {
+interface ShopItem {
   id: string;
   name: string;
   image?: string;
   address?: string;
-};
+}
 
-// ---------------- COMPONENT --------------
+interface DashboardShop {
+  orders: { shop: ShopItem }[];
+  status: string;
+}
+
+interface RecentOrdersApiResponse {
+  status: string;
+  message?: string;
+  orders?: RecentOrder[];
+}
 
 export default function Bars() {
   const router = useRouter();
   const pathname = usePathname();
+
+  // Extract shopId from route
   const shopIdFromUrl = pathname.split("/").pop() || "";
 
-  // All hooks must be here — BEFORE any conditional return
+  // ----------------------------
+  // 🔹 State Hooks (no conditional hooks)
+  // ----------------------------
   const [open, setOpen] = useState(false);
-  const [shop, setShop] = useState<Shop | null>(null);
-  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [shop, setShop] = useState<ShopItem | null>(null);
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<RecentOrder | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const userId =
@@ -68,17 +87,20 @@ export default function Bars() {
       ? localStorage.getItem("device_id") || "web"
       : "web";
 
-  // ----------- USE EFFECT ----------------
-
+  // ----------------------------
+  // 🔹 Fetch Shop + Recent Orders
+  // ----------------------------
   useEffect(() => {
+    if (!shopIdFromUrl) {
+      setError("Invalid Shop ID");
+      setLoading(false);
+      return;
+    }
+
     const fetchShopData = async () => {
       try {
-        let shopData: Shop | null = null;
-
-        const storedShop =
-          typeof window !== "undefined"
-            ? localStorage.getItem("selected_shop")
-            : null;
+        let shopData: ShopItem | null = null;
+        const storedShop = localStorage.getItem("selected_shop");
 
         if (storedShop) {
           shopData = JSON.parse(storedShop);
@@ -86,15 +108,17 @@ export default function Bars() {
           const response = await fetch(
             `https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`
           );
-          const data = await response.json();
+          const data: DashboardShop = await response.json();
 
           if (data.status === "1") {
-            shopData = data.orders
-              .map((o: any) => o.shop)
-              .find((s: Shop) => String(s.id) === shopIdFromUrl);
+            shopData =
+              data.orders
+                .map((o) => o.shop)
+                .find((s) => s.id === shopIdFromUrl) || null;
 
-            if (shopData)
+            if (shopData) {
               localStorage.setItem("selected_shop", JSON.stringify(shopData));
+            }
           }
         }
 
@@ -105,11 +129,9 @@ export default function Bars() {
         }
 
         setShop(shopData);
-        fetchRecentOrders(shopIdFromUrl);
+        await fetchRecentOrders(shopIdFromUrl);
       } catch (err) {
-        console.error(err);
         setError("Failed to fetch shop data.");
-        setLoading(false);
       }
     };
 
@@ -118,7 +140,8 @@ export default function Bars() {
         const response = await fetch(
           `https://liquiditybars.com/canada/backend/admin/api/myRecenntOrdersShopWise/${userId}/${shopId}`
         );
-        const data = await response.json();
+
+        const data: RecentOrdersApiResponse = await response.json();
 
         if (data.status === "1") {
           setRecentOrders(data.orders || []);
@@ -126,8 +149,7 @@ export default function Bars() {
           setError(data.message || "Failed to fetch recent orders");
         }
       } catch (err) {
-        console.error(err);
-        setError("Something went wrong while fetching recent orders");
+        setError("Something went wrong while fetching orders");
       } finally {
         setLoading(false);
       }
@@ -136,25 +158,30 @@ export default function Bars() {
     fetchShopData();
   }, [shopIdFromUrl, userId]);
 
-  // ------------------ HELPERS ------------------
-
+  // ----------------------------
+  // 🔹 Calculate Order Total
+  // ----------------------------
   const calculateTotal = () => {
     if (!selectedOrder) return 0;
+
     return selectedOrder.products.reduce((sum, p) => {
       return sum + Number(p.price) * Number(p.quantity);
     }, 0);
   };
 
-  // ------------------ ADD TO CART -----------------
-
+  // ----------------------------
+  // 🔹 Add Entire Order to Cart
+  // ----------------------------
   const handleAddToCart = async () => {
     if (!selectedOrder) return;
 
-    for (const product of selectedOrder.products) {
-      if (Number(product.quantity) <= 0) {
-        alert("Please choose a quantity for all items");
-        return;
-      }
+    const invalidItem = selectedOrder.products.find(
+      (p) => Number(p.quantity) <= 0
+    );
+
+    if (invalidItem) {
+      alert("Please select quantity for all items");
+      return;
     }
 
     for (const product of selectedOrder.products) {
@@ -168,8 +195,11 @@ export default function Bars() {
       params.append("cartIsLiquors", "1");
       params.append("units", product.size || "1oz");
 
+      // Double Shot
       const isDouble =
-        product.is_double_shot && product.extraShotQty ? "1" : "0";
+        product.is_double_shot && product.extraShotQty && product.extraShotQty > 0
+          ? "1"
+          : "0";
 
       params.append("is_double_shot", isDouble);
       params.append(
@@ -181,6 +211,7 @@ export default function Bars() {
         isDouble === "1" ? String(product.extraShotQty || 0) : "0"
       );
 
+      // Mixer
       params.append("choice_of_mixer_name", product.selectedMixer?.name || "");
       params.append(
         "choice_of_mixer_price",
@@ -189,31 +220,44 @@ export default function Bars() {
           : "0"
       );
 
-      params.append(
-        "special_instruction",
-        product.specialInstructions || ""
-      );
+      params.append("special_instruction", product.specialInstructions || "");
+
+      // Add-ons (blank)
+      params.append("add_on_id", "0");
+      params.append("add_on_name1", "");
+      params.append("add_on_name2", "");
+      params.append("add_on_price1", "0");
+      params.append("add_on_price2", "0");
+      params.append("add_on_quantity", "0");
+      params.append("add_on_unit", "0");
+
+      params.append("is_active", "1");
+      params.append("is_deleted", "0");
+      params.append("is_liquor", "1");
+      params.append("choice_of_alcohol_name", "");
 
       try {
         const res = await fetch(BACKEND_ADD_CART_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            Accept: "application/json, text/plain, */*",
+            Accept: "application/json",
           },
           body: params.toString(),
         });
 
         const raw = await res.text();
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
+
         if (!jsonMatch) {
-          alert("Server error while adding to cart");
+          alert("Server returned invalid response.");
           return;
         }
 
         const data = JSON.parse(jsonMatch[0]);
+
         if (!(data.status === "1" || data.status === 1)) {
-          alert(data.message || "Failed to add to cart");
+          alert(data.message || "Failed to add item");
           return;
         }
       } catch (err) {
@@ -223,21 +267,16 @@ export default function Bars() {
     }
 
     localStorage.setItem("cart_shop_id", shopIdFromUrl);
-    alert("All items added to cart successfully!");
+    alert("Items added to cart!");
     setSelectedOrder(null);
     setOpen(false);
   };
 
-  // ------------------ EARLY RETURNS AFTER HOOKS ------------------
-
-  if (!shopIdFromUrl) {
-    return <p className="text-red-600 text-center mt-10">Invalid shop ID</p>;
-  }
-
+  // ----------------------------
+  // 🔹 UI Render
+  // ----------------------------
   if (loading) return <p className="text-center mt-10">Loading...</p>;
   if (error) return <p className="text-red-600 text-center mt-10">{error}</p>;
-
-  // ------------------ UI ------------------
 
   return (
     <>
@@ -252,6 +291,13 @@ export default function Bars() {
               </figure>
             )}
 
+            <figcaption>
+              <h2 className={styles.barTitle}>{shop?.name}</h2>
+              <div className={styles.barAddress}>
+                <span>{shop?.address}</span>
+              </div>
+            </figcaption>
+
             <h3 className="sectionHead">Order Again</h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -259,17 +305,19 @@ export default function Bars() {
                 recentOrders.map((order) => (
                   <div key={order.id}>
                     <div className={styles.repeatOrderCard}>
-                      {order.products.map((prod) => (
-                        <div key={prod.id} className={styles.orderItem}>
-                          <span>{prod.product_name}</span>
-                          <span>x{prod.quantity}</span>
+                      {order.products.map((product) => (
+                        <div key={product.id} className={styles.orderItem}>
+                          <span>{product.product_name}</span>
+                          <span>x{product.quantity}</span>
                         </div>
                       ))}
+
                       <div className={styles.orderTotal}>
                         <span>
-                          Order Amount – $
+                          Order Amount - $
                           {order.total_amount || order.amount}
                         </span>
+
                         <button
                           onClick={() => {
                             setSelectedOrder(order);
@@ -284,9 +332,21 @@ export default function Bars() {
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500">No recent orders.</p>
+                <p>No recent orders</p>
               )}
             </div>
+          </div>
+
+          <div className="container-fluid pt-4 px-4 bottomButton">
+            <Link
+              href="/outlet-menu"
+              onClick={() =>
+                shop?.id && localStorage.setItem("shop_id", shop.id)
+              }
+              className="bg-primary px-3 py-3 rounded-lg w-full text-white block text-center"
+            >
+              View Menu
+            </Link>
 
             <Modal
               isOpen={open}
@@ -295,28 +355,32 @@ export default function Bars() {
             >
               {selectedOrder ? (
                 <div className={styles.itemWrapper}>
-                  {selectedOrder.products.map((p) => (
-                    <div key={p.id} className={styles.itemCard}>
-                      <div>
-                        <h4>{p.product_name}</h4>
+                  {selectedOrder.products.map((product) => (
+                    <div key={product.id} className={styles.itemCard}>
+                      <div className={styles.itemDetails}>
+                        <h4>{product.product_name}</h4>
+                        <p>({product.size || "1oz"})</p>
                       </div>
 
-                      <div>
-                        <p>$ {p.price}</p>
+                      <div className={styles.itemMeta}>
+                        <p className={styles.itemPrice}>$ {product.price}</p>
 
                         <QuantityButton
                           min={1}
                           max={10}
-                          initialValue={Number(p.quantity)}
+                          initialValue={Number(product.quantity)}
                           onChange={(qty) => {
                             setSelectedOrder((prev) => {
                               if (!prev) return prev;
-                              const updated = prev.products.map((x) =>
-                                x.id === p.id
-                                  ? { ...x, quantity: String(qty) }
-                                  : x
-                              );
-                              return { ...prev, products: updated };
+
+                              return {
+                                ...prev,
+                                products: prev.products.map((p) =>
+                                  p.id === product.id
+                                    ? { ...p, quantity: String(qty) }
+                                    : p
+                                ),
+                              };
                             });
                           }}
                         />
@@ -336,19 +400,9 @@ export default function Bars() {
                   </button>
                 </div>
               ) : (
-                <p>No items to show.</p>
+                <p>No items to show</p>
               )}
             </Modal>
-          </div>
-
-          <div className="container-fluid pt-4 bottomButton px-4">
-            <Link
-              href="/outlet-menu"
-              onClick={() => shop?.id && localStorage.setItem("shop_id", shop.id)}
-              className="bg-primary px-3 py-3 rounded-lg w-full text-white block text-center"
-            >
-              View Menu
-            </Link>
           </div>
         </div>
       </section>
