@@ -53,6 +53,33 @@ interface Category {
   items: MenuItem[];
 }
 
+// API Product returned from backend
+interface ProductAPI {
+  id: string | number;
+  name: string;
+  description?: string;
+  current_price?: number | string;
+  price?: number | string;
+  image?: string;
+  is_double_shot?: number | string;
+  double_shot_price?: number | string;
+  is_add_mixture?: number | string;
+}
+
+// API Category returned from backend
+interface CategoryAPI {
+  id: string | number;
+  name: string;
+  products?: ProductAPI[];
+}
+
+// API response type
+interface FetchCategoriesResponse {
+  status: string | number;
+  categories: CategoryAPI[];
+}
+
+
 /*---- Component ----*/
 export default function OutletMenu() {
   const router = useRouter();
@@ -165,45 +192,50 @@ export default function OutletMenu() {
 
   /* FETCH CATEGORIES for current shop */
   useEffect(() => {
-    let cancelled = false;
-    fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data && (data.status === "1" || data.status === 1) && Array.isArray(data.categories)) {
-          const mapped: Category[] = data.categories.map((cat: Record<string, any>) => ({
-            id: String(cat.id),
-            name: cat.name,
-            items: Array.isArray(cat.products)
-              ? cat.products.map((p: Record<string, any>) => ({
-                  id: Number(p.id),
-                  name: p.name,
-                  description: p.description || "",
-                  price: Number(p.current_price ?? p.price ?? 0) || 0,
-                  image: `https://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
-                    p.image || ""
-                  )}`,
-                  is_double_shot: Number(p.is_double_shot) || 0,
-                  double_shot_price: Number(p.double_shot_price || 0),
-                  is_add_mixture: Number(p.is_add_mixture) || 0,
-                  price_display: Number(p.current_price ?? p.price ?? 0) || 0,
-                }))
-              : [],
-          }));
-          const reversed = mapped.reverse();
-          setCategories(reversed);
-          if (reversed.length > 0) setActiveCategory(reversed[0].id);
-        } else {
-          setCategories([]);
-        }
-      })
-      .catch((err) => {
-        console.error("Error fetching categories:", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [shopId]);
+  let cancelled = false;
+  fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
+    .then((res) => res.json())
+    .then((data: FetchCategoriesResponse) => {
+      if (cancelled) return;
+
+      if (data && (data.status === "1" || data.status === 1) && Array.isArray(data.categories)) {
+        const mapped: Category[] = data.categories.map((cat) => ({
+          id: String(cat.id),
+          name: cat.name,
+          items: Array.isArray(cat.products)
+            ? cat.products.map((p) => ({
+                id: Number(p.id),
+                name: p.name,
+                description: p.description || "",
+                price: Number(p.current_price ?? p.price ?? 0) || 0,
+                image: `https://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
+                  p.image || ""
+                )}`,
+                is_double_shot: Number(p.is_double_shot) || 0,
+                double_shot_price: Number(p.double_shot_price || 0),
+                is_add_mixture: Number(p.is_add_mixture) || 0,
+                price_display: Number(p.current_price ?? p.price ?? 0) || 0,
+              }))
+            : [],
+        }));
+
+        const reversed = mapped.reverse();
+        setCategories(reversed);
+        if (reversed.length > 0) setActiveCategory(reversed[0].id);
+      } else {
+        setCategories([]);
+      }
+    })
+    .catch((err) => {
+      console.error("Error fetching categories:", err);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [shopId]);
+
+
 
   /* EXTRACT MIXERS */
   useEffect(() => {
