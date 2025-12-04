@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
@@ -19,23 +19,41 @@ interface Card {
   image: string;
 }
 
+interface CartItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  price: number;
+  choice_of_mixer_name?: string;
+  is_double_shot?: boolean;
+  shot_count?: number;
+  special_instruction?: string;
+}
+
+interface OldOrder {
+  id: string;
+  unique_id: string;
+  order_date: string;
+  status: string;
+}
+
 export default function Cart() {
   const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
-  const [cartCount, setCartCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
   const [activePickup, setActivePickup] = useState<string | null>(null);
-  const [oldOrders, setOldOrders] = useState<any[]>([]);
+  const [oldOrders, setOldOrders] = useState<OldOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
 
   const [showAcknowledgement, setShowAcknowledgement] = useState(false);
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
+
   const [deviceId, setDeviceId] = useState("web");
 
   const cards: Card[] = [
@@ -44,90 +62,91 @@ export default function Cart() {
     { id: "3", type: "Amex", last4: "7821", image: "/images/amex.png" },
   ];
 
+  // Load User ID
   useEffect(() => {
     const stored = localStorage.getItem("user_id");
     if (stored) setUserId(stored);
   }, []);
 
+  // Load Device ID
   useEffect(() => {
-      if (typeof window === "undefined") return;
-  
-      const storedId = localStorage.getItem("device_id");
-  
-      if (storedId) {
-        setDeviceId(storedId);
-      }
-    }, []);
+    if (typeof window === "undefined") return;
 
-  // --- Fetch the cart ---
-  const fetchCart = async () => {
+    const storedId = localStorage.getItem("device_id");
+    if (storedId) setDeviceId(storedId);
+  }, []);
+
+  // Fetch Cart
+  const fetchCart = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
+
     try {
       const res = await fetch("/api/getCart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, device_id: deviceId }),
       });
+
       const data = await res.json();
+
       if (data.status === "1") {
         setCartItems(data.cartItems || []);
         setCartTotal(Number(data.total_price || 0));
-        setCartCount(Number(data.total_quantity || 0));
       } else {
         setCartItems([]);
         setCartTotal(0);
-        setCartCount(0);
       }
-    } catch (err) {
-      console.error("Error fetching cart:", err);
+    } catch (e) {
+      console.error("Cart fetch error:", e);
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, deviceId]);
 
-  // --- Fetch old orders ---
-  const fetchOldOrders = async () => {
+  // Fetch Old Orders
+  const fetchOldOrders = useCallback(async () => {
     if (!userId) return;
     setLoadingOrders(true);
+
     try {
       const res = await fetch(
         `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
       );
       const data = await res.json();
+
       if (data.status === "1" && Array.isArray(data.orders)) {
         const filtered = data.orders.filter(
-          (order: any) =>
-            order.status === "0" ||
-            order.status === "1" ||
-            order.status === "2"
+          (order: OldOrder) =>
+            order.status === "0" || order.status === "1" || order.status === "2"
         );
         setOldOrders(filtered);
       } else {
         setOldOrders([]);
       }
-    } catch {
+    } catch (e) {
+      console.error("Order fetch error:", e);
       setOldOrders([]);
     } finally {
       setLoadingOrders(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (userId) {
       fetchCart();
       fetchOldOrders();
     }
-  }, [userId]);
+  }, [userId, fetchCart, fetchOldOrders]);
 
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
 
-  // --- Remove item with proper content type ---
+  // Remove item
   const removeItem = async (itemId: string) => {
     if (!userId || !itemId) return;
     setLoading(true);
+
     try {
-      // Send user_id and item_id as x-www-form-urlencoded!
       const params = new URLSearchParams();
       params.append("user_id", userId);
       params.append("item_id", itemId);
@@ -137,26 +156,27 @@ export default function Cart() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params,
       });
+
       const data = await res.json();
       if (data.status === "1") {
         await fetchCart();
       } else {
-        alert(data.message || "Could not remove item.");
+        alert(data.message || "Could not remove item");
       }
-    } catch (err) {
-      alert("Network error while removing item.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Update quantity ---
+  // Update Quantity
   const updateQuantity = async (itemId: string, newQty: number) => {
     const item = cartItems.find((i) => i.id === itemId);
     if (!item) return;
+
     if (newQty === 0) return removeItem(itemId);
 
     setLoading(true);
+
     try {
       const params = new URLSearchParams();
       params.append("user_id", userId || "");
@@ -168,14 +188,14 @@ export default function Cart() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params,
       });
+
       const data = await res.json();
+
       if (data.status === "1") {
         await fetchCart();
       } else {
         alert(data.message || "Could not update quantity.");
       }
-    } catch (err) {
-      alert("Network error while updating quantity.");
     } finally {
       setLoading(false);
     }
@@ -188,32 +208,46 @@ export default function Cart() {
     return "1";
   };
 
+  // Create Order
   const createOrderNow = async () => {
     const user_name = localStorage.getItem("user_name") || "";
     const user_email = localStorage.getItem("user_email") || "";
     const user_mobile = localStorage.getItem("user_mobile") || "";
+
     const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
     const shop_id = selected_shop?.id || "";
+
     const localCart = JSON.parse(localStorage.getItem("liquidity_cart_cache") || "[]");
 
     if (!userId || !user_name || !user_email || !user_mobile) {
-      alert("User information missing."); return;
+      alert("User information missing.");
+      return;
     }
-    if (!activePickup) { alert("Please select pickup location."); return; }
-    if (localCart.length === 0) { alert("Cart is empty."); return; }
 
-    const finalTotal = Number(cartTotal + 1 + 3.57 - 0.00 + tipValue).toFixed(2);
+    if (!activePickup) {
+      alert("Please select pickup location.");
+      return;
+    }
 
-    let formData = new FormData();
+    if (localCart.length === 0) {
+      alert("Cart is empty.");
+      return;
+    }
+
+    const finalTotal = Number(
+      cartTotal + 1 + 3.57 + tipValue
+    ).toFixed(2);
+
+    const formData = new FormData();
     formData.append("name", user_name);
     formData.append("email", user_email);
     formData.append("mobile", user_mobile);
-    formData.append("user_id", userId || "");
+    formData.append("user_id", userId);
     formData.append("payment_type", "2");
     formData.append("transaction_id", "");
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", "");
-    formData.append("device_id", "web");
+    formData.append("device_id", deviceId);
     formData.append("order_date", new Date().toISOString().split("T")[0]);
     formData.append("shop_id", shop_id);
     formData.append("wallet_amount", "0.00");
@@ -226,23 +260,32 @@ export default function Cart() {
         "https://liquiditybars.com/canada/backend/admin/api/createOrder",
         { method: "POST", body: formData }
       );
+
       const data = await res.json();
-      if (data.status == 1) {
+
+      if (data.status === 1 || data.status === "1") {
         router.push(`/order-success/${data.order_id}`);
       } else {
         alert(data.message || "Order failed");
       }
-    } catch (err) {
+    } catch (e) {
       alert("Something went wrong.");
     }
   };
 
+  // Checkout handler
   const handleCheckout = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
     const skip = localStorage.getItem("ack_skip_popup");
-    if (!skip) { setShowAcknowledgement(true); return; }
+    if (!skip) {
+      setShowAcknowledgement(true);
+      return;
+    }
+
     createOrderNow();
   };
+
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
@@ -250,14 +293,33 @@ export default function Cart() {
         <p className="text-gray-700 mb-5">
           I understand that it is my responsibility to pick up my drink when it is ready, and that failure to do so in a timely manner means my drink could get stolen or disposed of by the bar.
         </p>
+
         <div className="flex flex-col gap-3">
-          <button className="bg-primary text-white p-3 rounded-lg" onClick={() => { setShowAcknowledgement(false); createOrderNow(); }}>
+          <button
+            className="bg-primary text-white p-3 rounded-lg"
+            onClick={() => {
+              setShowAcknowledgement(false);
+              createOrderNow();
+            }}
+          >
             I Understand
           </button>
-          <button className="bg-green-600 text-white p-3 rounded-lg" onClick={() => { localStorage.setItem("ack_skip_popup", "1"); setShowAcknowledgement(false); createOrderNow(); }}>
+
+          <button
+            className="bg-green-600 text-white p-3 rounded-lg"
+            onClick={() => {
+              localStorage.setItem("ack_skip_popup", "1");
+              setShowAcknowledgement(false);
+              createOrderNow();
+            }}
+          >
             Yes, Don’t Show Again
           </button>
-          <button className="bg-gray-300 text-black p-3 rounded-lg" onClick={() => setShowAcknowledgement(false)}>
+
+          <button
+            className="bg-gray-300 text-black p-3 rounded-lg"
+            onClick={() => setShowAcknowledgement(false)}
+          >
             No, Cancel
           </button>
         </div>
@@ -265,23 +327,26 @@ export default function Cart() {
     </div>
   );
 
-  const finalTotalAmount = Number(cartTotal + 1 + 3.57 - 0.00 + tipValue).toFixed(2);
+  const finalTotalAmount = Number(
+    cartTotal + 1 + 3.57 + tipValue
+  ).toFixed(2);
 
   return (
     <>
       {showAcknowledgement && <AcknowledgementPopup />}
+
       <Header title="Casa Mezcal" />
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
-          {/* Previous Orders */}
+          {/* ---------------- PREVIOUS ORDERS ---------------- */}
           <div className="flex flex-col gap-4 p-4">
             {loadingOrders ? (
               <p className="text-gray-500">Loading previous orders...</p>
             ) : oldOrders.length === 0 ? (
               <p className="text-gray-500">No previous orders found.</p>
             ) : (
-              oldOrders.map((order: any) => (
+              oldOrders.map((order) => (
                 <Link
                   key={order.id}
                   href={`/order-status/${order.id}`}
@@ -290,7 +355,10 @@ export default function Cart() {
                   <div>
                     <h3 className="font-semibold text-lg">{order.unique_id}</h3>
                     <p className="text-sm text-gray-600">
-                      {order.order_date} - <span className="text-primary font-medium">{order.status === "1" ? "New" : "Accepted"}</span>
+                      {order.order_date} -
+                      <span className="text-primary font-medium ml-1">
+                        {order.status === "1" ? "New" : "Accepted"}
+                      </span>
                     </p>
                   </div>
                   <ChevronRight size={22} color="gray" />
@@ -299,7 +367,7 @@ export default function Cart() {
             )}
           </div>
 
-          {/* Cart Items */}
+          {/* ---------------- CART ITEMS ---------------- */}
           {loading ? (
             <p className="p-4 text-center text-gray-500">Loading cart...</p>
           ) : cartItems.length === 0 ? (
@@ -312,25 +380,34 @@ export default function Cart() {
                     <h4>
                       {item.product_name} <span>(1oz)</span>
                     </h4>
+
                     {item.choice_of_mixer_name && (
                       <p>
-                        <strong>Choice of mixer:</strong> {item.choice_of_mixer_name}
+                        <strong>Choice of mixer:</strong>{" "}
+                        {item.choice_of_mixer_name}
                       </p>
                     )}
+
                     {item.is_double_shot && (
                       <p>
-                        <strong>Additional shots:</strong> {item.shot_count}
+                        <strong>Additional shots:</strong>{" "}
+                        {item.shot_count}
                       </p>
                     )}
+
                     {item.special_instruction && (
                       <p>
-                        <strong>Special Instruction:</strong> {item.special_instruction}
+                        <strong>Special Instruction:</strong>{" "}
+                        {item.special_instruction}
                       </p>
                     )}
                   </div>
+
                   <div className={styles.itemRight}>
                     <h4>
-                      ${ (Number(item.price) * Number(item.quantity)).toFixed(2) }
+                      ${(
+                        Number(item.price) * Number(item.quantity)
+                      ).toFixed(2)}
                     </h4>
                     <QuantityButton
                       min={0}
@@ -342,6 +419,7 @@ export default function Cart() {
                   </div>
                 </div>
               ))}
+
               <div className={styles.itemCard}>
                 <Link href="/outlet-menu" className={styles.addItemButton}>
                   + Add Items
@@ -350,9 +428,10 @@ export default function Cart() {
             </>
           )}
 
-          {/* Pickup Location */}
+          {/* ---------------- PICKUP LOCATION ---------------- */}
           <div className={styles.pickupArea}>
             <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
+
             <div className={`${styles.pickupBlock} flex gap-3`}>
               {[
                 { id: "lounge", label: "1st Floor\nLounge" },
@@ -363,47 +442,62 @@ export default function Cart() {
                   key={loc.id}
                   type="button"
                   onClick={() => setActivePickup(loc.id)}
-                  className={`${styles.pickupItem} ${activePickup === loc.id ? "bg-primary text-white" : ""}`}
+                  className={`${styles.pickupItem} ${
+                    activePickup === loc.id ? "bg-primary text-white" : ""
+                  }`}
                 >
                   {loc.label.split("\n").map((line, i) => (
-                    <span key={i} className="block">{line}</span>
+                    <span key={i} className="block">
+                      {line}
+                    </span>
                   ))}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Billing Summary */}
+          {/* ---------------- BILLING SUMMARY ---------------- */}
           <div className={styles.billingArea}>
             <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
+
             <div className={styles.billingItem}>
               <p>Subtotal</p>
               <p>${cartTotal.toFixed(2)}</p>
             </div>
+
             <div className={styles.billingItem}>
               <p>Liquidity Cash</p>
               <p>-$0.00</p>
             </div>
+
             <div className={styles.billingItem}>
               <p>Service Fee</p>
               <p>$1.00</p>
             </div>
+
             <div className={styles.billingItem}>
               <p>Taxes & Other Fees</p>
               <p>$3.57</p>
             </div>
+
             <div className={styles.billingItem}>
               <p>Tips</p>
               <p>${tipValue.toFixed(2)}</p>
             </div>
+
             <div className={styles.billingItem}>
               <h4>Total</h4>
               <h4>${finalTotalAmount}</h4>
             </div>
-            <CardSelector cards={cards} onSelect={() => {}} defaultCardId="1" />
+
+            <CardSelector
+              cards={cards}
+              onSelect={() => {}}
+              defaultCardId="1"
+            />
           </div>
 
-          {/* TIP SELECTOR */}
+          {/* ---------------- TIP SELECTOR ---------------- */}
           <TipsSelector
             value={tipPercent}
             onChange={(val: number, isAmount: boolean) => {
@@ -416,16 +510,20 @@ export default function Cart() {
             }}
           />
 
-          {/* Checkout Button */}
+          {/* ---------------- CHECKOUT BUTTON ---------------- */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
-              <button type="submit" className="bg-primary px-3 py-3 rounded-lg w-full text-white">
+              <button
+                type="submit"
+                className="bg-primary px-3 py-3 rounded-lg w-full text-white"
+              >
                 Checkout
               </button>
             </form>
           </div>
         </div>
       </section>
+
       <BottomNavigation />
     </>
   );
