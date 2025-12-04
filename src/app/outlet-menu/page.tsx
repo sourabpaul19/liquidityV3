@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
@@ -6,7 +7,7 @@ import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigat
 import Modal from "@/components/common/Modal/Modal";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
 import Image from "next/image";
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import styles from "./outlet-menu.module.scss";
 import toast from "react-hot-toast";
@@ -51,8 +52,6 @@ interface Category {
   name: string;
   items: MenuItem[];
 }
-
-const BACKEND_ADD_CART_URL = "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems";
 
 /*---- Component ----*/
 export default function OutletMenu() {
@@ -110,16 +109,35 @@ export default function OutletMenu() {
   }, []);
 
   /* Utility: Normalize Cart */
-  const normalizeCartItem = (item: any): CartItem => ({
-    ...item,
-    is_double_shot: Boolean(item.is_double_shot),
-    selectedMixer:
-      (item.choice_of_mixer_name && mixers.length > 0
-        ? mixers.find(mix => mix.name === item.choice_of_mixer_name) || null
-        : null),
-    extraShotQty: item.shot_count || 0,
-    specialInstructions: item.special_instruction || "",
-  });
+  const normalizeCartItem = (item: Record<string, unknown>): CartItem => {
+    const isDoubleShot = Boolean(item["is_double_shot"]);
+
+    const choiceMixerName =
+      typeof item["choice_of_mixer_name"] === "string"
+        ? item["choice_of_mixer_name"]
+        : "";
+
+    const extraShots =
+      typeof item["shot_count"] === "number"
+        ? (item["shot_count"] as number)
+        : Number(item["shot_count"] as unknown) || 0;
+
+    const specialInstr =
+      typeof item["special_instruction"] === "string"
+        ? (item["special_instruction"] as string)
+        : "";
+
+    return {
+      ...(item as unknown as CartItem),
+      is_double_shot: isDoubleShot,
+      selectedMixer:
+        choiceMixerName && mixers.length > 0
+          ? mixers.find((mix) => mix.name === choiceMixerName) || null
+          : null,
+      extraShotQty: extraShots,
+      specialInstructions: specialInstr,
+    };
+  };
 
   /* Local Cart Hydration */
   useEffect(() => {
@@ -130,8 +148,8 @@ export default function OutletMenu() {
       setCartItems(itemsRaw ? JSON.parse(itemsRaw) : []);
       setCartTotal(totalRaw ? Number(totalRaw) : 0);
       setCartCount(countRaw ? Number(countRaw) : 0);
-    } catch (e) {
-      console.error("Error hydrating cart from localStorage:", e);
+    } catch {
+      // ignore hydration errors
     }
   }, []);
 
@@ -140,7 +158,9 @@ export default function OutletMenu() {
       localStorage.setItem("liquidity_cart_cache", JSON.stringify(items));
       localStorage.setItem("liquidity_cart_total", String(total));
       localStorage.setItem("liquidity_cart_count", String(count));
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
   };
 
   /* FETCH CATEGORIES for current shop */
@@ -151,11 +171,11 @@ export default function OutletMenu() {
       .then((data) => {
         if (cancelled) return;
         if (data && (data.status === "1" || data.status === 1) && Array.isArray(data.categories)) {
-          const mapped: Category[] = data.categories.map((cat: any) => ({
+          const mapped: Category[] = data.categories.map((cat: Record<string, any>) => ({
             id: String(cat.id),
             name: cat.name,
             items: Array.isArray(cat.products)
-              ? cat.products.map((p: any) => ({
+              ? cat.products.map((p: Record<string, any>) => ({
                   id: Number(p.id),
                   name: p.name,
                   description: p.description || "",
@@ -229,14 +249,16 @@ export default function OutletMenu() {
     if (activeBtn) {
       try {
         activeBtn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      } catch (e) {}
+      } catch {
+        // ignore
+      }
     }
   }, [activeCategory]);
 
   /* FETCH CART FROM BACKEND (NO array in deps!) */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchCartFromBackend();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   useEffect(() => {
@@ -265,7 +287,9 @@ export default function OutletMenu() {
       console.log("get cart" , data);
       // Normalize, ensure mixer mapping uses the latest mixers state
       const itemsBackend = data.cartItems ?? data.cart_items ?? data.data ?? [];
-      const items = itemsBackend.map((item: any) => normalizeCartItem(item));
+      const items = Array.isArray(itemsBackend)
+        ? itemsBackend.map((item: Record<string, unknown>) => normalizeCartItem(item))
+        : [];
       const total = Number(data.total_price ?? data.totalPrice ?? 0);
       const count = Number(data.total_quantity ?? data.total_qty ?? data.totalQuantity ?? 0);
       setCartItems(items);
@@ -299,7 +323,9 @@ export default function OutletMenu() {
       localStorage.removeItem("liquidity_cart_total");
       localStorage.removeItem("liquidity_cart_count");
       localStorage.removeItem("cart_shop_id");
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
     setCartItems([]);
     setCartCount(0);
     setCartTotal(0);
@@ -351,7 +377,7 @@ export default function OutletMenu() {
       ? item.price + doubleShotPrice * extraShotQty
       : item.price;
 
-  const data = {
+  const data: Record<string, string | number> = {
     device_id: deviceId || "",
     user_id: userId,
     cartProductIds: String(item.id),
@@ -371,7 +397,10 @@ export default function OutletMenu() {
     special_instructions: specialInstructions || "",
   };
 
-  const formBody = new URLSearchParams(data as any).toString();
+  const paramsObj = Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, String(v)])
+  );
+  const formBody = new URLSearchParams(paramsObj).toString();
 
   console.log(data);
 
@@ -387,7 +416,9 @@ export default function OutletMenu() {
     if (result.status === "1" || result.status === 1) {
       try {
         localStorage.setItem("cart_shop_id", shopId);
-      } catch {}
+      } catch {
+        // ignore
+      }
 
       await fetchCartFromBackend();
 
@@ -526,7 +557,7 @@ export default function OutletMenu() {
           {mixers.map((mixer) => (
             <label key={mixer.id} className={`cursor-pointer border rounded-lg p-3 flex items-center justify-between transition ${tempSelectedMixer?.id === mixer.id ? "border-primary bg-blue-50" : "border-gray-200"}`}>
               <span className="text-sm mr-auto text-center">{mixer.name} - ${mixer.price_display ?? mixer.price}</span>
-              <input type="radio" name="mixer" value={mixer.id} checked={tempSelectedMixer?.id === mixer.id} onChange={() => setTempSelectedMixer(mixer)} />
+              <input type="radio" name="mixer" value={String(mixer.id)} checked={tempSelectedMixer?.id === mixer.id} onChange={() => setTempSelectedMixer(mixer)} />
             </label>
           ))}
         </div>
