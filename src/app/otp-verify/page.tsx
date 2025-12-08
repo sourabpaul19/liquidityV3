@@ -87,7 +87,7 @@ export default function OTPVerify() {
       };
 
       const res = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
+        "http://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -122,7 +122,7 @@ export default function OTPVerify() {
       formData.append("otp", otp);
 
       const response = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/otpVerification/",
+        "http://liquiditybars.com/canada/backend/admin/api/otpVerification/",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

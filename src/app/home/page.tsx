@@ -66,8 +66,8 @@ export default function HomePage() {
         }
 
         const [dashboardRes, orderRes] = await Promise.all([
-          fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
-          fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
+          fetch(`http://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
+          fetch(`http://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
         ]);
 
         const dashboardData = await dashboardRes.json();
@@ -141,7 +141,13 @@ export default function HomePage() {
   return (
     <>
       <Header buttonType="menu" />
-      <section className="pageWrapper hasHeader hasFooter hasBottomNav">
+      
+      <section
+  className={`pageWrapper hasHeader hasFooter ${
+    ongoingOrder ? "hasBottomNav" : ""
+  }`}
+>
+
         <div className="pageContainer py-4">
 
           {/* 🟦 Banner Slider */}

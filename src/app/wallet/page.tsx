@@ -41,7 +41,7 @@ export default function Wallet() {
 
     const fetchWalletData = async () => {
       try {
-        const res = await fetch(`https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`);
+        const res = await fetch(`http://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`);
         const data = await res.json();
 
         if (data.status === "1") {

@@ -52,7 +52,7 @@ export default function OrderDetails() {
     const fetchOrderDetails = async () => {
       try {
         const res = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`
+          `http://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`
         );
         const data = await res.json();
 

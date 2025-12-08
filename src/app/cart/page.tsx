@@ -111,7 +111,7 @@ export default function Cart() {
 
     try {
       const res = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
+        `http://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
       );
       const data = await res.json();
 
@@ -257,7 +257,7 @@ export default function Cart() {
 
     try {
       const res = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/createOrder",
+        "http://liquiditybars.com/canada/backend/admin/api/createOrder",
         { method: "POST", body: formData }
       );
 

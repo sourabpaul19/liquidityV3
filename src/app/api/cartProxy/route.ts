@@ -5,7 +5,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const backendRes = await fetch(
-      "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
+      "http://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
       {
         method: "POST",
         headers: {

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // Perform backend fetch
     const resp = await fetch(
-      "https://liquiditybars.com/canada/backend/admin/api/getCartDetailsForUser/",
+      "http://liquiditybars.com/canada/backend/admin/api/getCartDetailsForUser/",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

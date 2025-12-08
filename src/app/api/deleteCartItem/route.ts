@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const backendUrl = `https://liquiditybars.com/canada/backend/admin/api/deleteFromCart/${item_id}`;
+    const backendUrl = `http://liquiditybars.com/canada/backend/admin/api/deleteFromCart/${item_id}`;
 
     const apiResponse = await fetch(backendUrl, {
       method: "GET",

@@ -10,13 +10,13 @@ const nextConfig: NextConfig = {
         hostname: 'ui-avatars.com',
       },
       {
-        protocol: 'https',
+        protocol: 'http',
         hostname: 'liquiditybars.com',
         port: '',
         pathname: '/canada/backend/assets/uploads/**',
       },
       {
-        protocol: 'https',
+        protocol: 'http',
         hostname: 'liquiditybars.com',
         port: '',
         pathname: '/canada/backend/assets/upload/**',

@@ -193,7 +193,7 @@ export default function OutletMenu() {
   /* FETCH CATEGORIES for current shop */
   useEffect(() => {
   let cancelled = false;
-  fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
+  fetch(`http://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
     .then((res) => res.json())
     .then((data: FetchCategoriesResponse) => {
       if (cancelled) return;
@@ -208,7 +208,7 @@ export default function OutletMenu() {
                 name: p.name,
                 description: p.description || "",
                 price: Number(p.current_price ?? p.price ?? 0) || 0,
-                image: `https://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
+                image: `http://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
                   p.image || ""
                 )}`,
                 is_double_shot: Number(p.is_double_shot) || 0,
