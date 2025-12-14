@@ -54,7 +54,7 @@ export default function OrderSuccess() {
     async function fetchOrder() {
       try {
         const res = await fetch(
-          `http://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`
+          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`
         );
         const data = await res.json();
 
@@ -113,7 +113,7 @@ export default function OrderSuccess() {
           </svg>
         </button>
 
-        <Link href="http://liquiditybars.com/faq.html" className="icon_only ml-auto">
+        <Link href="https://liquiditybars.com/faq.html" className="icon_only ml-auto">
           <EllipsisVertical />
         </Link>
       </header>

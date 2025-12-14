@@ -1,28 +1,19 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
-
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'ui-avatars.com',
+        protocol: "https",
+        hostname: "ui-avatars.com",
+        pathname: "/**",
       },
       {
-        protocol: 'http',
-        hostname: 'liquiditybars.com',
-        port: '',
-        pathname: '/canada/backend/assets/uploads/**',
-      },
-      {
-        protocol: 'http',
-        hostname: 'liquiditybars.com',
-        port: '',
-        pathname: '/canada/backend/assets/upload/**',
+        protocol: "https",
+        hostname: "liquiditybars.com",
+        pathname: "/canada/backend/assets/upload/**",
       },
     ],
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     // Correct API (user_id directly in URL)
-    const getCartURL = `http://liquiditybars.com/canada/backend/admin/api/clearCartForUser/${user_id}`;
+    const getCartURL = `https://liquiditybars.com/canada/backend/admin/api/clearCartForUser/${user_id}`;
 
     // Fetch current cart items
     const cartRes = await fetch(getCartURL, { method: "GET" });

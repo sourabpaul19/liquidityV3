@@ -39,7 +39,7 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
     const fetchDetails = async () => {
       try {
         const res = await fetch(
-          `http://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
+          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
           { cache: "no-store" }
         );
 
@@ -120,7 +120,7 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
         </button>
 
         <Link
-          href="http://liquiditybars.com/faq.html"
+          href="https://liquiditybars.com/faq.html"
           className="icon_only ml-auto"
         >
           <EllipsisVertical />

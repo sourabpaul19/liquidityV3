@@ -1,43 +1,56 @@
+// app/api/addToCart/route.ts
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    // Read URL-encoded body from frontend
     const text = await req.text();
     const params = new URLSearchParams(text);
+    
+    const user_id = params.get("user_id") || "";
+    const device_id = params.get("device_id") || "";
 
-    // Send to Liquidity backend as x-www-form-urlencoded
-    const backendRes = await fetch(
-      "http://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json, text/plain, */*",
-        },
-        body: params.toString(),
-      }
-    );
+    if (!device_id) {
+      return NextResponse.json(
+        { status: "0", message: "Missing device_id" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ ROUTE BY user_id PRESENCE
+    const endpoint = user_id 
+      ? "https://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/"
+      : "https://liquiditybars.com/canada/backend/admin/api/addMultipleTempCartItems";
+
+    console.log("→ ENDPOINT:", endpoint);
+    console.log("PAYLOAD:", params.toString());
+
+    const backendRes = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json, text/plain, */*",
+      },
+      body: params.toString(),
+    });
 
     const responseText = await backendRes.text();
+    console.log("BACKEND RAW (200 chars):", responseText.slice(0, 200));
 
-    // Try parse JSON safely
     let data;
     try {
       data = JSON.parse(responseText);
     } catch {
       return NextResponse.json(
-        { status: "0", message: "Backend returned non-JSON", raw: responseText },
+        { status: "0", message: "Backend returned non-JSON", raw: responseText.slice(0, 500) },
         { status: 500 }
       );
     }
 
     return NextResponse.json(data);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-
+    console.error("Proxy error:", err);
     return NextResponse.json(
-      { status: "0", message: "Error in API", error: message },
+      { status: "0", message: "Proxy error" },
       { status: 500 }
     );
   }

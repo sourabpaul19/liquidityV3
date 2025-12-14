@@ -33,7 +33,7 @@ export default function MyOrders() {
           return;
         }
 
-        const res = await fetch(`http://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`);
+        const res = await fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`);
         const data = await res.json();
 
         if (data.status === "1" && data.orders) {

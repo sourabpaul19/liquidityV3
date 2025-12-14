@@ -3,21 +3,25 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 
 import styles from "./cart.module.scss";
 import Header from "@/components/common/Header/Header";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
-import CardSelector from "@/components/common/CardSelector/CardSelector";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
 
-interface Card {
-  id: string;
-  type: string;
-  last4: string;
-  image: string;
-}
+// ---------- Stripe ----------
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+);
 
 interface CartItem {
   id: string;
@@ -37,6 +41,154 @@ interface OldOrder {
   status: string;
 }
 
+interface SavedCard {
+  id: string;
+  stripe_payment_method_id: string;
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+}
+
+type PayMode = "new_card" | "saved_card";
+
+// ---------- Saved Card Selector ----------
+function SavedCardSelector({
+  cards,
+  selectedId,
+  onSelect,
+}: {
+  cards: SavedCard[];
+  selectedId: string | null;
+  onSelect: (card: SavedCard) => void;
+}) {
+  if (!cards.length) {
+    return (
+      <p className="text-sm text-gray-500 mt-2">
+        No saved cards found. Use a new card to save one.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 mt-3">
+      <h4 className="text-sm font-semibold">Saved cards</h4>
+      {cards.map((card) => (
+        <button
+          key={card.id}
+          type="button"
+          onClick={() => onSelect(card)}
+          className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-left ${
+            selectedId === card.id
+              ? "border-primary bg-primary/5"
+              : "border-gray-200"
+          }`}
+        >
+          <div>
+            <p className="text-sm font-medium capitalize">
+              {card.brand} •••• {card.last4}
+            </p>
+            <p className="text-xs text-gray-500">
+              Expires {card.exp_month}/{card.exp_year}
+            </p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Stripe Payment Form (new card) ----------
+function NewCardPaymentForm({
+  clientSecret,
+  amountLabel,
+  onSuccess,
+}: {
+  clientSecret: string | null;
+  amountLabel: string;
+  onSuccess: (paymentIntentId: string) => Promise<void>;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements || !clientSecret) return;
+
+    setProcessing(true);
+
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      setProcessing(false);
+      return;
+    }
+
+    const { error, paymentIntent } = await stripe.confirmCardPayment(
+      clientSecret,
+      {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: localStorage.getItem("user_name") || "",
+            email: localStorage.getItem("user_email") || "",
+          },
+        },
+      }
+    );
+
+    setProcessing(false);
+
+    if (error) {
+      alert(error.message || "Payment failed");
+      return;
+    }
+
+    if (paymentIntent && paymentIntent.status === "succeeded") {
+      await onSuccess(paymentIntent.id);
+    } else {
+      alert("Payment did not complete.");
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+      <div className="p-3 bg-gray-50 border rounded-lg">
+        <CardElement
+          options={{
+            style: {
+              base: {
+                fontSize: "16px",
+                color: "#1f2933",
+                "::placeholder": { color: "#9ca3af" },
+              },
+            },
+          }}
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={!stripe || !clientSecret || processing}
+        className={`w-full py-3 px-4 rounded-lg font-medium transition ${
+          !stripe || !clientSecret || processing
+            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+            : "bg-primary text-white hover:bg-primary/90"
+        }`}
+      >
+        {processing ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Processing…
+          </span>
+        ) : (
+          `Pay ${amountLabel}`
+        )}
+      </button>
+    </form>
+  );
+}
+
+// ---------- Main Cart Component ----------
 export default function Cart() {
   const router = useRouter();
 
@@ -56,27 +208,32 @@ export default function Cart() {
 
   const [deviceId, setDeviceId] = useState("web");
 
-  const cards: Card[] = [
-    { id: "1", type: "Visa", last4: "2304", image: "/images/visa.png" },
-    { id: "2", type: "MasterCard", last4: "5478", image: "/images/card.png" },
-    { id: "3", type: "Amex", last4: "7821", image: "/images/amex.png" },
-  ];
+  // payment mode and saved cards
+  const [payMode, setPayMode] = useState<PayMode>("new_card");
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [selectedSavedCard, setSelectedSavedCard] = useState<SavedCard | null>(
+    null
+  );
 
-  // Load User ID
+  // Stripe: client secret for new-card flow
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [initializingPayment, setInitializingPayment] = useState(false);
+
+  // ---------- Load basic info ----------
   useEffect(() => {
-    const stored = localStorage.getItem("user_id");
-    if (stored) setUserId(stored);
+    const storedUser = typeof window !== "undefined"
+      ? localStorage.getItem("user_id")
+      : null;
+    if (storedUser) setUserId(storedUser);
+
+    const storedDevice =
+      typeof window !== "undefined"
+        ? localStorage.getItem("device_id")
+        : null;
+    if (storedDevice) setDeviceId(storedDevice);
   }, []);
 
-  // Load Device ID
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const storedId = localStorage.getItem("device_id");
-    if (storedId) setDeviceId(storedId);
-  }, []);
-
-  // Fetch Cart
+  // ---------- Fetch Cart ----------
   const fetchCart = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -97,51 +254,78 @@ export default function Cart() {
         setCartItems([]);
         setCartTotal(0);
       }
-    } catch (e) {
-      console.error("Cart fetch error:", e);
+    } catch (err) {
+      console.error("Cart fetch error:", err);
     } finally {
       setLoading(false);
     }
   }, [userId, deviceId]);
 
-  // Fetch Old Orders
+  // ---------- Fetch Old Orders ----------
   const fetchOldOrders = useCallback(async () => {
     if (!userId) return;
     setLoadingOrders(true);
 
     try {
       const res = await fetch(
-        `http://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
+        `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
       );
       const data = await res.json();
 
       if (data.status === "1" && Array.isArray(data.orders)) {
         const filtered = data.orders.filter(
           (order: OldOrder) =>
-            order.status === "0" || order.status === "1" || order.status === "2"
+            order.status === "0" ||
+            order.status === "1" ||
+            order.status === "2"
         );
         setOldOrders(filtered);
       } else {
         setOldOrders([]);
       }
-    } catch (e) {
-      console.error("Order fetch error:", e);
+    } catch (err) {
+      console.error("Order fetch error:", err);
       setOldOrders([]);
     } finally {
       setLoadingOrders(false);
     }
   }, [userId]);
 
-  useEffect(() => {
-    if (userId) {
-      fetchCart();
-      fetchOldOrders();
+  // ---------- Fetch Saved Cards ----------
+  const fetchSavedCards = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      const res = await fetch("/api/savecard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+
+      const data = await res.json();
+      if (data.status === "1" && Array.isArray(data.cards)) {
+        setSavedCards(data.cards);
+      } else {
+        setSavedCards([]);
+      }
+    } catch (err) {
+      console.error("Saved card fetch error:", err);
+      setSavedCards([]);
     }
-  }, [userId, fetchCart, fetchOldOrders]);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchCart();
+    fetchOldOrders();
+    fetchSavedCards();
+  }, [userId, fetchCart, fetchOldOrders, fetchSavedCards]);
 
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
+  const finalTotalAmountNum = cartTotal + 1 + 3.57 + tipValue;
+  const finalTotalAmount = finalTotalAmountNum.toFixed(2);
 
-  // Remove item
+  // ---------- Cart item operations ----------
   const removeItem = async (itemId: string) => {
     if (!userId || !itemId) return;
     setLoading(true);
@@ -168,11 +352,9 @@ export default function Cart() {
     }
   };
 
-  // Update Quantity
   const updateQuantity = async (itemId: string, newQty: number) => {
     const item = cartItems.find((i) => i.id === itemId);
     if (!item) return;
-
     if (newQty === 0) return removeItem(itemId);
 
     setLoading(true);
@@ -190,7 +372,6 @@ export default function Cart() {
       });
 
       const data = await res.json();
-
       if (data.status === "1") {
         await fetchCart();
       } else {
@@ -208,16 +389,20 @@ export default function Cart() {
     return "1";
   };
 
-  // Create Order
-  const createOrderNow = async () => {
+  // ---------- Create Liquidity Order ----------
+  const createLiquidityOrder = async (transactionId: string) => {
     const user_name = localStorage.getItem("user_name") || "";
     const user_email = localStorage.getItem("user_email") || "";
     const user_mobile = localStorage.getItem("user_mobile") || "";
 
-    const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
+    const selected_shop = JSON.parse(
+      localStorage.getItem("selected_shop") || "{}"
+    );
     const shop_id = selected_shop?.id || "";
 
-    const localCart = JSON.parse(localStorage.getItem("liquidity_cart_cache") || "[]");
+    const localCart = JSON.parse(
+      localStorage.getItem("liquidity_cart_cache") || "[]"
+    );
 
     if (!userId || !user_name || !user_email || !user_mobile) {
       alert("User information missing.");
@@ -234,72 +419,154 @@ export default function Cart() {
       return;
     }
 
-    const finalTotal = Number(
-      cartTotal + 1 + 3.57 + tipValue
-    ).toFixed(2);
-
     const formData = new FormData();
     formData.append("name", user_name);
     formData.append("email", user_email);
     formData.append("mobile", user_mobile);
     formData.append("user_id", userId);
     formData.append("payment_type", "2");
-    formData.append("transaction_id", "");
+    formData.append("transaction_id", transactionId);
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", "");
     formData.append("device_id", deviceId);
     formData.append("order_date", new Date().toISOString().split("T")[0]);
     formData.append("shop_id", shop_id);
     formData.append("wallet_amount", "0.00");
-    formData.append("online_amount", finalTotal);
+    formData.append("online_amount", finalTotalAmount);
     formData.append("order_type", getOrderType());
     formData.append("tips", Number(tipValue).toFixed(2));
 
     try {
       const res = await fetch(
-        "http://liquiditybars.com/canada/backend/admin/api/createOrder",
+        "https://liquiditybars.com/canada/backend/admin/api/createOrder",
         { method: "POST", body: formData }
       );
-
       const data = await res.json();
 
       if (data.status === 1 || data.status === "1") {
+        localStorage.removeItem("liquidity_cart_cache");
         router.push(`/order-success/${data.order_id}`);
       } else {
         alert(data.message || "Order failed");
       }
-    } catch (e) {
-      alert("Something went wrong.");
+    } catch (err) {
+      alert("Something went wrong while creating order.");
     }
   };
 
-  // Checkout handler
-  const handleCheckout = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  // ---------- Initialize PaymentIntent for new-card flow ----------
+  const initNewCardPayment = async () => {
+    if (!userId) {
+      alert("User not found.");
+      return false;
+    }
+    if (!activePickup) {
+      alert("Please select pickup location.");
+      return false;
+    }
 
-    const skip = localStorage.getItem("ack_skip_popup");
-    if (!skip) {
-      setShowAcknowledgement(true);
+    setInitializingPayment(true);
+
+    try {
+      const amount = Math.round(finalTotalAmountNum * 100);
+      const res = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          currency: "cad",
+          // optionally send userId to tie to customer
+          user_id: userId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.client_secret) {
+        alert(data.error || "Failed to start payment.");
+        setInitializingPayment(false);
+        return false;
+      }
+
+      setClientSecret(data.client_secret);
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert("Failed to start payment.");
+      return false;
+    } finally {
+      setInitializingPayment(false);
+    }
+  };
+
+  // ---------- Pay with Saved Card ----------
+  const payWithSavedCard = async () => {
+    if (!selectedSavedCard) {
+      alert("Please select a saved card.");
+      return;
+    }
+    if (!userId) {
+      alert("User not found.");
+      return;
+    }
+    if (!activePickup) {
+      alert("Please select pickup location.");
       return;
     }
 
-    createOrderNow();
+    const customerId = localStorage.getItem("stripe_customer_id") || "";
+    if (!customerId) {
+      alert("Stripe customer not found.");
+      return;
+    }
+
+    const amount = Math.round(finalTotalAmountNum * 100);
+
+    try {
+      const res = await fetch("/api/pay-with-saved-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          currency: "cad",
+          customerId,
+          paymentMethodId: selectedSavedCard.stripe_payment_method_id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.status === "success" && data.payment_intent_id) {
+        await createLiquidityOrder(data.payment_intent_id);
+      } else {
+        alert(data.message || "Payment failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Payment failed.");
+    }
   };
 
+  // ---------- Acknowledgement Popup ----------
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
         <h2 className="text-xl font-bold mb-4">Acknowledgement</h2>
         <p className="text-gray-700 mb-5">
-          I understand that it is my responsibility to pick up my drink when it is ready, and that failure to do so in a timely manner means my drink could get stolen or disposed of by the bar.
+          I understand that it is my responsibility to pick up my drink when it
+          is ready, and that failure to do so in a timely manner means my drink
+          could get stolen or disposed of by the bar.
         </p>
 
         <div className="flex flex-col gap-3">
           <button
             className="bg-primary text-white p-3 rounded-lg"
-            onClick={() => {
+            onClick={async () => {
               setShowAcknowledgement(false);
-              createOrderNow();
+              if (payMode === "saved_card") {
+                await payWithSavedCard();
+              } else {
+                await initNewCardPayment();
+              }
             }}
           >
             I Understand
@@ -307,13 +574,17 @@ export default function Cart() {
 
           <button
             className="bg-green-600 text-white p-3 rounded-lg"
-            onClick={() => {
+            onClick={async () => {
               localStorage.setItem("ack_skip_popup", "1");
               setShowAcknowledgement(false);
-              createOrderNow();
+              if (payMode === "saved_card") {
+                await payWithSavedCard();
+              } else {
+                await initNewCardPayment();
+              }
             }}
           >
-            Yes, Don’t Show Again
+            Yes, Don&apos;t Show Again
           </button>
 
           <button
@@ -327,9 +598,22 @@ export default function Cart() {
     </div>
   );
 
-  const finalTotalAmount = Number(
-    cartTotal + 1 + 3.57 + tipValue
-  ).toFixed(2);
+  // ---------- Checkout submit ----------
+  const handleCheckout = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const skip = localStorage.getItem("ack_skip_popup");
+    if (!skip) {
+      setShowAcknowledgement(true);
+      return;
+    }
+
+    if (payMode === "saved_card") {
+      await payWithSavedCard();
+    } else {
+      await initNewCardPayment();
+    }
+  };
 
   return (
     <>
@@ -339,7 +623,7 @@ export default function Cart() {
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
-          {/* ---------------- PREVIOUS ORDERS ---------------- */}
+          {/* Previous Orders */}
           <div className="flex flex-col gap-4 p-4">
             {loadingOrders ? (
               <p className="text-gray-500">Loading previous orders...</p>
@@ -367,7 +651,7 @@ export default function Cart() {
             )}
           </div>
 
-          {/* ---------------- CART ITEMS ---------------- */}
+          {/* Cart Items */}
           {loading ? (
             <p className="p-4 text-center text-gray-500">Loading cart...</p>
           ) : cartItems.length === 0 ? (
@@ -390,8 +674,7 @@ export default function Cart() {
 
                     {item.is_double_shot && (
                       <p>
-                        <strong>Additional shots:</strong>{" "}
-                        {item.shot_count}
+                        <strong>Additional shots:</strong> {item.shot_count}
                       </p>
                     )}
 
@@ -405,7 +688,7 @@ export default function Cart() {
 
                   <div className={styles.itemRight}>
                     <h4>
-                      ${(
+                      {(
                         Number(item.price) * Number(item.quantity)
                       ).toFixed(2)}
                     </h4>
@@ -428,7 +711,7 @@ export default function Cart() {
             </>
           )}
 
-          {/* ---------------- PICKUP LOCATION ---------------- */}
+          {/* Pickup Location */}
           <div className={styles.pickupArea}>
             <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
 
@@ -456,48 +739,91 @@ export default function Cart() {
             </div>
           </div>
 
-          {/* ---------------- BILLING SUMMARY ---------------- */}
-          <div className={styles.billingArea}>
-            <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
+          {/* Billing + Payment */}
+          <Elements
+            stripe={stripePromise}
+            options={clientSecret ? { clientSecret } : undefined}
+          >
+            <div className={styles.billingArea}>
+              <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
 
-            <div className={styles.billingItem}>
-              <p>Subtotal</p>
-              <p>${cartTotal.toFixed(2)}</p>
+              <div className={styles.billingItem}>
+                <p>Subtotal</p>
+                <p>${cartTotal.toFixed(2)}</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <p>Liquidity Cash</p>
+                <p>-$0.00</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <p>Service Fee</p>
+                <p>$1.00</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <p>Taxes &amp; Other Fees</p>
+                <p>$3.57</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <p>Tips</p>
+                <p>${tipValue.toFixed(2)}</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <h4>Total</h4>
+                <h4>${finalTotalAmount}</h4>
+              </div>
+
+              {/* Payment Mode Toggle */}
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayMode("new_card")}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border ${
+                    payMode === "new_card"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-white text-gray-700 border-gray-300"
+                  }`}
+                >
+                  New card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayMode("saved_card")}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border ${
+                    payMode === "saved_card"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-white text-gray-700 border-gray-300"
+                  }`}
+                >
+                  Saved card
+                </button>
+              </div>
+
+              {/* Saved Cards UI */}
+              {payMode === "saved_card" && (
+                <SavedCardSelector
+                  cards={savedCards}
+                  selectedId={selectedSavedCard?.id || null}
+                  onSelect={(card) => setSelectedSavedCard(card)}
+                />
+              )}
+
+              {/* New Card Payment UI */}
+              {payMode === "new_card" && clientSecret && (
+                <NewCardPaymentForm
+                  clientSecret={clientSecret}
+                  amountLabel={`$${finalTotalAmount}`}
+                  onSuccess={createLiquidityOrder}
+                />
+              )}
             </div>
+          </Elements>
 
-            <div className={styles.billingItem}>
-              <p>Liquidity Cash</p>
-              <p>-$0.00</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Service Fee</p>
-              <p>$1.00</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Taxes & Other Fees</p>
-              <p>$3.57</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Tips</p>
-              <p>${tipValue.toFixed(2)}</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <h4>Total</h4>
-              <h4>${finalTotalAmount}</h4>
-            </div>
-
-            <CardSelector
-              cards={cards}
-              onSelect={() => {}}
-              defaultCardId="1"
-            />
-          </div>
-
-          {/* ---------------- TIP SELECTOR ---------------- */}
+          {/* Tips Selector */}
           <TipsSelector
             value={tipPercent}
             onChange={(val: number, isAmount: boolean) => {
@@ -510,17 +836,55 @@ export default function Cart() {
             }}
           />
 
-          {/* ---------------- CHECKOUT BUTTON ---------------- */}
-          <div className={styles.bottomArea}>
-            <form onSubmit={handleCheckout}>
-              <button
-                type="submit"
-                className="bg-primary px-3 py-3 rounded-lg w-full text-white"
-              >
-                Checkout
-              </button>
-            </form>
-          </div>
+          {/* Checkout Button (when no clientSecret yet for new card) */}
+          {payMode === "new_card" && !clientSecret && (
+            <div className={styles.bottomArea}>
+              <form onSubmit={handleCheckout}>
+                <button
+                  type="submit"
+                  disabled={
+                    initializingPayment ||
+                    !activePickup ||
+                    cartItems.length === 0
+                  }
+                  className={`bg-primary px-3 py-3 rounded-lg w-full text-white ${
+                    initializingPayment ||
+                    !activePickup ||
+                    cartItems.length === 0
+                      ? "opacity-60 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  {initializingPayment ? "Starting payment..." : "Checkout"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Saved card checkout button */}
+          {payMode === "saved_card" && (
+            <div className={styles.bottomArea}>
+              <form onSubmit={handleCheckout}>
+                <button
+                  type="submit"
+                  disabled={
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
+                  }
+                  className={`bg-primary px-3 py-3 rounded-lg w-full text-white ${
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
+                      ? "opacity-60 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  Pay with saved card
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </section>
 

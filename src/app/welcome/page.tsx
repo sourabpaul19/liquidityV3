@@ -1,4 +1,5 @@
 'use client';
+
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -10,45 +11,64 @@ export default function Welcome() {
   const router = useRouter();
   const [eventCode, setEventCode] = useState("");
 
+  // ✅ Universal UUID generator (fallback if crypto.randomUUID is missing)
+  const generateUUID = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+
+    // Fallback UUID v4 generator
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
   // 🔥 Auto redirect if user already logged in
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const loggedIn = localStorage.getItem("isLoggedIn");
 
     if (loggedIn === "true") {
       router.replace("/home");
-      return;
     }
   }, [router]);
 
   // Generate & store unique device id only once
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      let deviceId = localStorage.getItem("device_id");
+    if (typeof window === "undefined") return;
 
-      if (!deviceId) {
-        deviceId = crypto.randomUUID();   // creates unique device ID
-        localStorage.setItem("device_id", deviceId);
-      }
+    let deviceId = localStorage.getItem("device_id");
 
-      console.log("Device ID:", deviceId);
+    if (!deviceId) {
+      deviceId = generateUUID(); // ✔ Works in all browsers
+      localStorage.setItem("device_id", deviceId);
     }
+
+    console.log("Device ID:", deviceId);
   }, []);
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventCode.trim()) {
+
+    const trimmed = eventCode.trim();
+
+    if (!trimmed) {
       alert("Please enter an event code");
       return;
     }
 
-    // SAVE SHOP ID
-    localStorage.setItem("shop_id", eventCode);
+    // Save SHOP ID
+    localStorage.setItem("shop_id", trimmed);
 
-    router.push(`/outlet/${encodeURIComponent(eventCode)}`);
+    router.push(`/outlet/${encodeURIComponent(trimmed)}`);
   };
 
   return (
     <div className={styles.welcome_wrapper}>
+      
       <div className="logoArea">
         <Image alt="Liquidity Logo" src={logo} />
       </div>
@@ -60,25 +80,31 @@ export default function Welcome() {
 
       <form onSubmit={handleVerify} className={`${styles.welcomeForm} mt-5 mb-3`}>
         <input
-          type='text'
+          type="text"
           value={eventCode}
           onChange={(e) => setEventCode(e.target.value)}
           className={`${styles.textbox} rounded-lg`}
-          placeholder='Enter event code'
+          placeholder="Enter event code"
           autoFocus
         />
-        <button type="submit" style={{ display: 'none' }}>Submit</button>
+
+        {/* Hidden submit button so Enter key works */}
+        <button type="submit" style={{ display: "none" }}>Submit</button>
       </form>
 
       <p>or</p>
 
       <div className={styles.welcomeForm}>
         <div className="grid grid-cols-1 sm:grid-cols-1 my-3 gap-4">
-          <Link href="/choose" className='bg-primary px-3 py-3 rounded-lg w-full text-white text-center'>
+          <Link
+            href="/choose"
+            className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center"
+          >
             Sign Up / Sign In
           </Link>
         </div>
       </div>
+
     </div>
   );
 }

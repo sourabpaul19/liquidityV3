@@ -1,56 +1,71 @@
-// app/api/getBackendCart/route.ts
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    // Parse JSON safely with validation
-    const body = await request.json();
-    if (!body || !body.user_id || !body.device_id) {
+    const { user_id, device_id } = await req.json();
+
+    if (!device_id) {
       return NextResponse.json(
-        { message: "Missing required fields: user_id and device_id" },
+        { status: "0", message: "Missing device_id" },
         { status: 400 }
       );
     }
 
-    // Perform backend fetch
-    const resp = await fetch(
-      "http://liquiditybars.com/canada/backend/admin/api/getCartDetailsForUser/",
+    const body = new URLSearchParams();
+    body.append("device_id", device_id);
+    if (user_id) body.append("user_id", user_id);
+
+    const backendRes = await fetch(
+      "https://liquiditybars.com/canada/backend/admin/api/getTempCartDetailsForUser/",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
       }
     );
 
-    // If backend returns error status, return it
-    if (!resp.ok) {
-      const errorText = await resp.text();
+    const text = await backendRes.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
       return NextResponse.json(
-        { message: `Backend error: ${resp.status} - ${errorText}` },
-        { status: resp.status }
+        {
+          status: "0",
+          message: "Backend returned non-JSON",
+          raw: text.slice(0, 500),
+        },
+        { status: 500 }
       );
     }
 
-    // Parse backend JSON response
-    const data = await resp.json();
+    const rawItems = data.cartItems ?? data.data ?? [];
 
-    // Sanity check on data before returning
-    if (!data) {
-      return NextResponse.json(
-        { message: "Empty backend response" },
-        { status: 502 }
-      );
-    }
+    const cartItems = Array.isArray(rawItems)
+      ? rawItems.map((ci: any) => ({
+          id: String(ci.id ?? ci.cart_item_id ?? ci.product_id ?? ""),
+          name: ci.product_name ?? ci.name ?? "",
+          price: Number(ci.price ?? ci.product_price ?? 0),
+          quantity: Number(ci.quantity ?? ci.cart_quantity ?? 1),
+          choice_of_mixer_name: ci.choice_of_mixer_name ?? "",
+          extraShotQty: Number(ci.shot_count ?? 0),
+          specialInstructions: ci.special_instruction ?? "",
+        }))
+      : [];
 
-    return NextResponse.json(data);
-  } catch (err: unknown) {
-    console.error("Proxy API Error:", err);
-
-    const message =
-      err instanceof Error ? err.message : "Internal Server Error";
-
+    return NextResponse.json({
+      status: data.status,
+      message: data.message,
+      cartItems,
+    });
+  } catch (err: any) {
     return NextResponse.json(
-      { message },
+      {
+        status: "0",
+        message: "Error in proxy",
+        error: err?.message ?? String(err),
+      },
       { status: 500 }
     );
   }

@@ -19,6 +19,8 @@
     "@mui/icons-material": "^7.3.2",
     "@mui/material": "^7.3.2",
     "@mui/x-tree-view": "^8.11.3",
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.5.3",
     "bootstrap": "^5.3.7",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.24",
@@ -34,6 +36,7 @@
     "react-hot-toast": "^2.6.0",
     "react-pdf": "^10.1.0",
     "sass": "^1.89.2",
+    "stripe": "^20.0.0",
     "swiper": "^11.2.10"
   },
   "devDependencies": {
@@ -42,6 +45,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/stripe": "^8.0.416",
     "eslint": "^9",
     "eslint-config-next": "15.4.2",
     "tailwindcss": "^4",

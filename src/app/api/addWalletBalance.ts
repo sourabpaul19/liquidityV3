@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { user_id, amount } = req.body;
 
   try {
-    const response = await fetch("http://liquiditybars.com/canada/backend/admin/api/add_wallet_balance/", {
+    const response = await fetch("https://liquiditybars.com/canada/backend/admin/api/add_wallet_balance/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id, amount }),

@@ -2,29 +2,27 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { user_id, device_id, item_id } = await req.json();
+    const { id } = await req.json(); // temp_carts.id
 
-    const formData = new URLSearchParams();
-    formData.append("user_id", user_id);
-    formData.append("device_id", device_id);
-    formData.append("item_id", item_id);
+    if (!id) {
+      return NextResponse.json(
+        { status: 0, message: "Missing id" },
+        { status: 400 }
+      );
+    }
 
-    const apiRes = await fetch(
-      "https://liquiditybars.com/canada/backend/admin/api/deleteFromCart/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: formData.toString(),
-        cache: "no-store",
-      }
-    );
+    const url = `https://liquiditybars.com/canada/backend/admin/api/deleteFromTempCart/${id}`;
+
+    const apiRes = await fetch(url, {
+      method: "GET", // or "POST" if your routes are POST, but URL still has /{id}
+      headers: {
+        Accept: "application/json, text/plain, */*",
+      },
+      cache: "no-store",
+    });
 
     const text = await apiRes.text();
 
-    // If HTML returned, it's an error
     if (!apiRes.ok || text.trim().startsWith("<")) {
       return NextResponse.json(
         {
@@ -40,7 +38,6 @@ export async function POST(req: Request) {
     return NextResponse.json(data);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-
     return NextResponse.json(
       { status: 0, message: "Proxy failed", error: message },
       { status: 500 }

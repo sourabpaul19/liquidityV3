@@ -66,8 +66,8 @@ export default function HomePage() {
         }
 
         const [dashboardRes, orderRes] = await Promise.all([
-          fetch(`http://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
-          fetch(`http://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
+          fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
+          fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
         ]);
 
         const dashboardData = await dashboardRes.json();

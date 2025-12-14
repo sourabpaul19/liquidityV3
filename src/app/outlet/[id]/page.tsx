@@ -1,5 +1,3 @@
-// Fixed page.tsx with all TypeScript, ESLint, and dependency issues resolved
-
 "use client";
 
 import { useRouter, usePathname, useParams } from "next/navigation";
@@ -81,6 +79,11 @@ interface Category {
   items: MenuItem[];
 }
 
+interface StoreData {
+  name: string;
+  image: string | null;
+}
+
 export default function Outlet() {
   const router = useRouter();
   const pathname = usePathname();
@@ -96,6 +99,12 @@ export default function Outlet() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
   const [cartCount, setCartCount] = useState<number>(0);
+
+  // ✅ NEW: Store data state with proper null handling
+  const [storeData, setStoreData] = useState<StoreData>({
+    name: "Vertige Investment Group Annual Summit",
+    image: null
+  });
 
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [modalQty, setModalQty] = useState<number>(1);
@@ -115,6 +124,42 @@ export default function Outlet() {
   const AdsRef = useRef<HTMLDivElement>(null);
 
   const handleButtonClick = () => router.back();
+
+  // ✅ NEW: Fetch store data
+  useEffect(() => {
+  const fetchStoreData = async () => {
+    try {
+      const res = await fetch(
+        "https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers"
+      );
+      const data = await res.json();
+
+      if (data.status === "1" && Array.isArray(data.shops)) {
+        const shop = data.shops.find(
+          (s: { id: string }) => String(s.id) === String(shopId)
+        );
+
+        if (shop) {
+          setStoreData({
+            name: shop.name || "Vertige Investment Group Annual Summit",
+            image: shop.image || null,
+          });
+        } else {
+          // fallback if no matching shop
+          setStoreData({
+            name: "Vertige Investment Group Annual Summit",
+            image: null,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching store data:", err);
+    }
+  };
+
+  fetchStoreData();
+}, [shopId]);
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -136,37 +181,36 @@ export default function Outlet() {
   }, []);
 
   const normalizeCartItem = useCallback(
-  (
-    item: Partial<CartItem> & {
-      choice_of_mixer_name?: string;
-      shot_count?: number;
-      special_instruction?: string;
-    }
-  ): CartItem => ({
-    id: String(item.id ?? ""),
-    name: item.name ?? "",
-    price: Number(item.price ?? 0),
-    quantity: Number(item.quantity ?? 1),
+    (
+      item: Partial<CartItem> & {
+        choice_of_mixer_name?: string;
+        shot_count?: number;
+        special_instruction?: string;
+      }
+    ): CartItem => ({
+      id: String(item.id ?? ""),
+      name: item.name ?? "",
+      price: Number(item.price ?? 0),
+      quantity: Number(item.quantity ?? 1),
 
-    // computed
-    is_double_shot: Boolean(item.is_double_shot),
-    selectedMixer:
-      item.choice_of_mixer_name && mixers.length > 0
-        ? mixers.find((mix) => mix.name === item.choice_of_mixer_name) || null
-        : null,
+      // computed
+      is_double_shot: Boolean(item.is_double_shot),
+      selectedMixer:
+        item.choice_of_mixer_name && mixers.length > 0
+          ? mixers.find((mix) => mix.name === item.choice_of_mixer_name) || null
+          : null,
 
-    double_shot_price: Number(item.double_shot_price ?? 0),
-    extraShotQty: item.shot_count ?? item.extraShotQty ?? 0,
+      double_shot_price: Number(item.double_shot_price ?? 0),
+      extraShotQty: item.shot_count ?? item.extraShotQty ?? 0,
 
-    specialInstructions:
-      item.special_instruction ?? item.specialInstructions ?? "",
+      specialInstructions:
+        item.special_instruction ?? item.specialInstructions ?? "",
 
-    choice_of_mixer_name: item.choice_of_mixer_name ?? "",
-    addOns: item.addOns ?? [],
-  }),
-  [mixers]
-);
-
+      choice_of_mixer_name: item.choice_of_mixer_name ?? "",
+      addOns: item.addOns ?? [],
+    }),
+    [mixers]
+  );
 
   useEffect(() => {
     const clearCartOnLoad = async () => {
@@ -236,7 +280,7 @@ export default function Outlet() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`http://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
+    fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;
@@ -251,7 +295,7 @@ export default function Outlet() {
                     name: p.name,
                     description: p.description || "",
                     price: Number(p.current_price ?? p.price ?? 0),
-                    image: `http://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
+                    image: `https://liquiditybars.com/canada/backend/assets/upload/sub_categories/${encodeURIComponent(
                       p.image || ""
                     )}`,
                     is_double_shot: Number(p.is_double_shot || 0),
@@ -322,7 +366,10 @@ export default function Outlet() {
       const res = await fetch("/api/getCart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, device_id: deviceId }),
+        body: JSON.stringify({ 
+          user_id: userId || null,
+          device_id: deviceId
+        }),
       });
       const data = await res.json();
 
@@ -430,98 +477,34 @@ export default function Outlet() {
     }
 
     const isDouble = extraShotQty > 0 ? 1 : 0;
-    const doubleShotPrice = extraShotQty > 0 ? item.double_shot_price || 0 : 0;
-    const price = extraShotQty > 0 ? item.price + doubleShotPrice * extraShotQty : item.price;
+    const doubleShotPrice = extraShotQty > 0 ? (item.double_shot_price || 0) : 0;
+    const price = extraShotQty > 0
+      ? item.price + doubleShotPrice * extraShotQty
+      : item.price;
 
-    const localCartItem: LocalCartItem = {
-      device_id: deviceId || "",
-      user_id: userId,
+    const data: Record<string, string | number> = {
+      device_id: deviceId || "web",
       cartProductIds: String(item.id),
       cartProductsNames: item.name,
-      cartProductPrices: price,
+      cartProductPrices: price.toFixed(2),
       cartQuantities: qty,
       cartIsLiquors: item.is_double_shot ? "1" : "0",
       units: "1oz",
+      choice_of_mixer_name: selectedMixer?.name || "",
       is_double_shots: isDouble,
       double_shot_prices: doubleShotPrice * extraShotQty,
-      shot_count: extraShotQty,
-      choice_of_mixer_names: selectedMixer?.name || "",
       special_instructions: specialInstructions || "",
-      shop_id: shopId,
+      choice_of_mixer_names: selectedMixer?.name || "",
+      shot_count: extraShotQty,
+      is_active: 1,
     };
 
-    if (!userId) {
-      let localCart: LocalCartItem[] = [];
-      try {
-        localCart = JSON.parse(localStorage.getItem("guestCart") || "[]");
-      } catch {}
+    const stringData: Record<string, string> = Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, String(v)])
+    );
 
-      const existingIndex = localCart.findIndex(
-        (c) => c.cartProductIds === localCartItem.cartProductIds
-      );
-
-      if (existingIndex >= 0) localCart[existingIndex].cartQuantities += qty;
-      else localCart.push(localCartItem);
-
-      localStorage.setItem("guestCart", JSON.stringify(localCart));
-
-      const newCartItems = [...cartItems];
-      const existingIdx = newCartItems.findIndex((ci) => ci.id === String(item.id));
-
-      if (existingIdx >= 0) newCartItems[existingIdx].quantity += qty;
-      else
-        newCartItems.push({
-          id: String(item.id),
-          name: item.name,
-          price,
-          quantity: qty,
-          is_double_shot: Boolean(isDouble),
-          double_shot_price: doubleShotPrice * extraShotQty,
-          extraShotQty,
-          specialInstructions,
-          selectedMixer,
-          choice_of_mixer_name: selectedMixer?.name || "",
-        });
-
-      const total = newCartItems.reduce((acc, c) => acc + c.price * c.quantity, 0);
-      const count = newCartItems.reduce((acc, c) => acc + c.quantity, 0);
-
-      setCartItems(newCartItems);
-      setCartTotal(total);
-      setCartCount(count);
-
-      toast.success("Item added to cart");
-
-      setSelectedItem(null);
-      setModalQty(1);
-      setExtraShotQty(0);
-      setSelectedMixer(null);
-      setTempSelectedMixer(null);
-      setSpecialInstructions("");
-      return;
-    }
-
-    const data = {
-      device_id: deviceId || "",
-      user_id: userId,
-      cartProductIds: String(item.id),
-      cartProductsNames: item.name,
-      cartProductPrices: price,
-      cartQuantities: qty,
-      cartIsLiquors: item.is_double_shot ? "1" : "0",
-      units: "1oz",
-      is_double_shots: isDouble,
-      double_shot_prices: doubleShotPrice * extraShotQty,
-      shot_count: extraShotQty,
-      choice_of_mixer_names: selectedMixer?.name || "",
-      special_instructions: specialInstructions || "",
-    };
-
-    const formBody = new URLSearchParams(
-      Object.fromEntries(
-        Object.entries(data).map(([key, value]) => [key, String(value)])
-      )
-    ).toString();
+    const formBody = new URLSearchParams(stringData).toString();
+    console.log("✅ FIXED PAYLOAD:", formBody);
 
     try {
       const res = await fetch("/api/addToCart", {
@@ -529,13 +512,11 @@ export default function Outlet() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formBody,
       });
+
       const result = await res.json();
 
       if (result.status === "1" || result.status === 1) {
-        try {
-          localStorage.setItem("cart_shop_id", shopId);
-        } catch {}
-
+        localStorage.setItem("cart_shop_id", shopId);
         await fetchCartFromBackend();
         toast.success(result.message || "Item added to cart");
 
@@ -546,13 +527,15 @@ export default function Outlet() {
         setTempSelectedMixer(null);
         setSpecialInstructions("");
       } else {
-        alert(result.message || "Failed to add to cart");
+        toast.error(result.message || "Failed to add to cart");
       }
     } catch (err) {
-      console.error("addToCart network error:", err);
-      alert("Network error while adding to cart");
+      console.error("addToCart error:", err);
+      toast.error("Network error");
     }
   };
+
+  console.log("cartCount, cartTotal:", cartCount, cartTotal);
 
   return (
     <>
@@ -575,16 +558,33 @@ export default function Outlet() {
         </button>
 
         <div className={`${styles.outletTitle} pageTitle transition-colors duration-300 ${headerWhite ? 'text-black opacity-100' : 'text-white opacity-0'}`}>
-          Vertige Investment Group Annual Summit
+          {storeData.name}
         </div>
       </header>
 
       <section className="pageWrapper">
+        {/* ✅ FIXED: Conditional Image rendering - no empty src */}
         <div ref={bannerRef} className={styles.outletBanner}>
-          <Image src={bar} alt="" fill />
+          {storeData.image ? (
+            <Image 
+              src={storeData.image} 
+              alt={storeData.name} 
+              fill 
+              className="object-cover rounded-lg" 
+              onError={() => setStoreData(prev => ({ ...prev, image: null }))}
+            />
+          ) : (
+            <Image 
+              src={bar} 
+              alt={storeData.name} 
+              fill 
+              className="object-cover rounded-lg" 
+            />
+          )}
         </div>
 
-        <div className={styles.outletName}>Welcome to the Vertige Investment Group Annual Summit</div>
+        {/* ✅ FIXED: Use dynamic store name */}
+        <div className={styles.outletName}>Welcome to {storeData.name}</div>
 
         <div ref={AdsRef} className={styles.outletAds}>
           <div>

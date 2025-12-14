@@ -5,18 +5,6 @@ import { useState, useEffect, FormEvent } from "react";
 import styles from "./otp.module.scss";
 import toast from "react-hot-toast";
 
-// ----------------------
-// TYPES
-// ----------------------
-interface CartItem {
-  product_id: string;
-  qty: number;
-  price?: number;
-  mixer_id?: string;
-  mixer_qty?: number;
-  [key: string]: string | number | undefined;
-}
-
 interface UserData {
   id: string;
   name: string;
@@ -31,10 +19,17 @@ interface OTPResponse {
   user?: UserData;
 }
 
-interface AddCartResponse {
+interface TempCartResponse {
   status: string | number | boolean;
   message?: string;
-  success?: boolean;
+  cartItems?: unknown[];
+  data?: unknown[];
+  [key: string]: unknown;
+}
+
+interface TransferCartResponse {
+  status: string | number | boolean;
+  message?: string;
   [key: string]: unknown;
 }
 
@@ -46,66 +41,78 @@ export default function OTPVerify() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Get mobile number from URL or localStorage
+  // Prefill mobile
   useEffect(() => {
     const phoneParam = params.get("phone");
-    const savedMobile = localStorage.getItem("user_mobile");
+    const savedMobile =
+      typeof window !== "undefined"
+        ? localStorage.getItem("user_mobile")
+        : null;
 
     if (phoneParam) setMobile(phoneParam);
     else if (savedMobile) setMobile(savedMobile);
   }, [params]);
 
-  // Go back
-  const handleButtonClick = () => router.back();
+  const handleBack = () => router.back();
 
-  // -------------------------------
-  // GUEST CART HELPERS
-  // -------------------------------
-  const getLocalCart = (): CartItem[] => {
-    try {
-      return JSON.parse(localStorage.getItem("cart") || "[]") as CartItem[];
-    } catch {
-      return [];
-    }
-  };
+  // --- API helpers ---
 
-  const clearLocalCart = () => {
-    localStorage.removeItem("cart");
-  };
-
-  // Send guest cart items to backend
-  const addGuestCartToBackend = async (
+  const fetchTempCart = async (
     userId: string,
-    deviceId: string,
-    items: CartItem[]
-  ): Promise<AddCartResponse | null> => {
+    deviceId: string
+  ): Promise<TempCartResponse | null> => {
     try {
-      const payload = {
-        user_id: userId,
-        device_id: deviceId,
-        cart_items: items,
-      };
+      const body = new URLSearchParams();
+      body.append("device_id", deviceId);
+      body.append("user_id", userId);
 
       const res = await fetch(
-        "http://liquiditybars.com/canada/backend/admin/api/addMultipleCartItems/",
+        "https://liquiditybars.com/canada/backend/admin/api/getTempCartDetailsForUser/",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
         }
       );
 
-      const data: AddCartResponse = await res.json();
+      const data: TempCartResponse = await res.json();
+      console.log("getTempCartDetailsForUser RESPONSE:", data);
       return data;
     } catch (err) {
-      console.error("Error adding multiple cart items:", err);
+      console.error("getTempCartDetailsForUser error:", err);
       return null;
     }
   };
 
-  // -------------------------------
-  // VERIFY OTP
-  // -------------------------------
+  const transferFromTempCart = async (
+    userId: string,
+    deviceId: string
+  ): Promise<TransferCartResponse | null> => {
+    try {
+      const body = new URLSearchParams();
+      body.append("device_id", deviceId);
+      body.append("user_id", userId);
+
+      const res = await fetch(
+        "https://liquiditybars.com/canada/backend/admin/api/transferFromTempCart",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+        }
+      );
+
+      const data: TransferCartResponse = await res.json();
+      console.log("transferFromTempCart RESPONSE:", data);
+      return data;
+    } catch (err) {
+      console.error("transferFromTempCart error:", err);
+      return null;
+    }
+  };
+
+  // --- OTP handler ---
+
   const handleVerify = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -118,11 +125,11 @@ export default function OTPVerify() {
 
     try {
       const formData = new URLSearchParams();
-      formData.append("mobile", mobile.startsWith("+") ? mobile : `${mobile}`);
+      formData.append("mobile", mobile.startsWith("+") ? mobile : mobile);
       formData.append("otp", otp);
 
       const response = await fetch(
-        "http://liquiditybars.com/canada/backend/admin/api/otpVerification/",
+        "https://liquiditybars.com/canada/backend/admin/api/otpVerification/",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -131,22 +138,31 @@ export default function OTPVerify() {
       );
 
       const data: OTPResponse = await response.json();
-      console.log("OTP Verify Response:", data);
+      console.log("otpVerification RESPONSE:", data);
 
-      if (data.status === "1" || data.status === 1 || data.status === true) {
-        toast.success("OTP verified successfully!");
+      const ok =
+        data.status === "1" || data.status === 1 || data.status === true;
 
-        if (!data.user) {
-          toast.error("User details missing in response.");
-          setLoading(false);
-          return;
-        }
+      if (!ok) {
+        toast.error(data.message || "Invalid OTP, please try again.");
+        return;
+      }
 
-        const user = data.user;
+      if (!data.user) {
+        toast.error("User details missing in response.");
+        return;
+      }
 
-        // ------------------------------
-        // SAVE USER SESSION
-        // ------------------------------
+      toast.success("OTP verified successfully!");
+      const user = data.user;
+
+      const deviceId =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem("device_id") || "")) ||
+        "";
+
+      // Save session
+      if (typeof window !== "undefined") {
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("user_id", user.id || "");
         localStorage.setItem("user_name", user.name || "");
@@ -154,43 +170,60 @@ export default function OTPVerify() {
         localStorage.setItem("user_mobile", user.mobile || mobile);
         localStorage.setItem("user_dob", user.dob || "");
         localStorage.setItem("userData", JSON.stringify(user));
+      }
 
-        // ------------------------------
-        // MOVE GUEST CART TO BACKEND
-        // ------------------------------
-        const guestCart = getLocalCart();
+      // Temp cart → user cart using transferFromTempCart
+      if (deviceId) {
+        const loadingToast = toast.loading("Transferring your cart...");
 
-        if (guestCart.length > 0) {
-          toast.loading("Adding items to your cart...");
+        // First check if temp cart exists
+        const tempCartRes = await fetchTempCart(user.id, deviceId);
 
-          const deviceId = localStorage.getItem("device_id") || "";
-
-          const addCartRes = await addGuestCartToBackend(
-            user.id,
-            deviceId,
-            guestCart
+        const hasTempCart =
+          !!tempCartRes &&
+          (tempCartRes.status === "1" ||
+            tempCartRes.status === 1 ||
+            tempCartRes.status === true) &&
+          (
+            (Array.isArray(tempCartRes.cartItems) &&
+              tempCartRes.cartItems!.length > 0) ||
+            (Array.isArray(tempCartRes.data) &&
+              tempCartRes.data!.length > 0)
           );
 
-          if (addCartRes && (addCartRes.status === "1" || addCartRes.success)) {
-            toast.success("Items added to your cart!");
-            clearLocalCart();
-            router.push("/checkout");
-            return;
+        if (hasTempCart) {
+          // Transfer temp cart to user cart
+          const transferRes = await transferFromTempCart(user.id, deviceId);
+
+          toast.dismiss(loadingToast);
+
+          const transferOk =
+            !!transferRes &&
+            (transferRes.status === "1" ||
+              transferRes.status === 1 ||
+              transferRes.status === true);
+
+          if (transferOk) {
+            toast.success("Cart transferred successfully!");
           } else {
-            toast.error("Failed to add items to cart.");
+            toast.error(
+              "Cart transfer failed but continuing to checkout. You can add items again."
+            );
           }
+
+          router.push("/checkout");
+          return;
         }
 
-        // ------------------------------
-        // REDIRECT BASED ON PROFILE
-        // ------------------------------
-        if (!user.name || user.name.trim() === "") {
-          router.push("/new-account");
-        } else {
-          router.push("/home");
-        }
+        toast.dismiss(loadingToast);
+        toast.success("No previous cart found. Starting fresh!");
+      }
+
+      // No temp cart – go by profile
+      if (!user.name || user.name.trim() === "") {
+        router.push("/new-account");
       } else {
-        toast.error(data.message || "Invalid OTP, please try again.");
+        router.push("/home");
       }
     } catch (error) {
       console.error("OTP Verify Error:", error);
@@ -200,13 +233,10 @@ export default function OTPVerify() {
     }
   };
 
-  // ===============================
-  //     UI
-  // ===============================
   return (
     <>
       <header className="header">
-        <button type="button" className="icon_only" onClick={handleButtonClick}>
+        <button type="button" className="icon_only" onClick={handleBack}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path
               d="M15 6L9 12L15 18"
@@ -237,7 +267,7 @@ export default function OTPVerify() {
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-primary px-3 py-3 rounded-lg w-full text-white"
+                className="bg-primary px-3 py-3 rounded-lg w-full text-white disabled:opacity-50"
               >
                 {loading ? "Verifying..." : "Confirm"}
               </button>
@@ -246,7 +276,7 @@ export default function OTPVerify() {
         </div>
 
         <div className={styles.otpFooter}>
-          <p className="text-center">Didn’t receive a code? Resend</p>
+          <p className="text-center">Didn't receive a code? Resend</p>
         </div>
       </section>
     </>

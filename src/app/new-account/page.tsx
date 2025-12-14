@@ -70,7 +70,7 @@ export default function NewAccount() {
       });
 
       const response = await fetch(
-        "http://liquiditybars.com/canada/backend/admin/api/updateProfile/",
+        "https://liquiditybars.com/canada/backend/admin/api/updateProfile/",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
