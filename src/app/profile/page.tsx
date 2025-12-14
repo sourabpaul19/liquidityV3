@@ -5,9 +5,10 @@ import Image from 'next/image';
 import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigation';
 import Header from '@/components/common/Header/Header';
 import styles from "./profile.module.scss";
-import { UserRoundPen, ChevronRight, Wallet, History, Settings, LogOut } from "lucide-react";
+import { UserRoundPen, ChevronRight, Wallet, History, Settings, LogOut, Trash2, AlertTriangle, X } from "lucide-react";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 
 export default function Profile() {
   const router = useRouter();
@@ -15,6 +16,11 @@ export default function Profile() {
   const [isClient, setIsClient] = useState(false);
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [loadingWallet, setLoadingWallet] = useState(true);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  
+  // Modal states
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -39,11 +45,10 @@ export default function Profile() {
     }
   }, [isClient, router]);
 
-  // ✅ FIXED: Extract userId to separate state to eliminate TypeScript error
   useEffect(() => {
     if (!user) return;
     
-    const userId = user.id; // TypeScript now knows user is not null here
+    const userId = user.id;
 
     async function fetchWalletBalance() {
       try {
@@ -55,12 +60,10 @@ export default function Profile() {
         console.log("Wallet API Response:", data);
 
         if (data.status === "1") {
-          // Use backend balance if valid and > 0
           if (data.wallet_balance && parseFloat(data.wallet_balance) > 0) {
             setWalletBalance(data.wallet_balance);
             localStorage.setItem("wallet_balance", data.wallet_balance);
           } 
-          // Fallback: Calculate from wallets array (type 1=credit(+), type 2=debit(-))
           else if (data.wallets && Array.isArray(data.wallets)) {
             const balance = data.wallets.reduce((total: number, wallet: any) => {
               const amount = parseFloat(wallet.amount) || 0;
@@ -97,19 +100,70 @@ export default function Profile() {
     }
 
     fetchWalletBalance();
-  }, [user]); // ✅ Depend on user object (stable reference)
+  }, [user]);
 
-  const handleLogout = () => {
-    const confirmLogout = window.confirm('Are you sure you want to log out?');
-    if (!confirmLogout) return;
+  const handleLogoutConfirm = () => {
+    setShowLogoutModal(false);
+    
+    localStorage.clear();
+    sessionStorage.clear();
+    toast.success('Logged out successfully', {
+      duration: 3000,
+      position: 'top-right'
+    });
+    router.replace('/');
+  };
 
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    setShowDeleteModal(false);
+    
     try {
-      localStorage.clear();
-      sessionStorage.clear();
-      router.replace('/');
+      setDeletingAccount(true);
+      
+      const response = await fetch(
+        `https://liquiditybars.com/canada/backend/admin/api/delete_account/${user?.id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.status === "1") {
+        toast.success('Account deleted successfully. You will be logged out.', {
+          duration: 4000,
+          position: 'top-right'
+        });
+        
+        localStorage.clear();
+        sessionStorage.clear();
+        router.replace('/');
+      } else {
+        toast.error(data.message || 'Failed to delete account', {
+          duration: 5000,
+          position: 'top-right'
+        });
+      }
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Delete account error:', error);
+      toast.error('Network error. Please try again.', {
+        duration: 5000,
+        position: 'top-right'
+      });
+    } finally {
+      setDeletingAccount(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
   };
 
   if (!isClient) return <div className="text-center py-10">Loading...</div>;
@@ -176,7 +230,7 @@ export default function Profile() {
                 <span className={styles.menuText}><h5>Settings</h5></span>
                 <ChevronRight size={16} />
               </Link>
-              <button onClick={handleLogout} className={styles.menuItem}>
+              <button onClick={() => setShowLogoutModal(true)} className={styles.menuItem}>
                 <span className={styles.menuIcon}><LogOut size={20} /></span>
                 <span className={styles.menuText}><h5>Log Out</h5></span>
                 <ChevronRight size={16} />
@@ -185,13 +239,112 @@ export default function Profile() {
           </nav>
 
           <div className="container-fluid pt-4 px-4 bottomButton fixed">
-            <button className="bg-red-500 px-3 py-3 rounded-lg w-full text-white text-center hover:bg-red-600 transition-colors">
-              Delete Account
+            <button 
+              onClick={() => setShowDeleteModal(true)}
+              disabled={deletingAccount}
+              className="bg-red-500 hover:bg-red-600 disabled:bg-red-400 disabled:cursor-not-allowed px-3 py-3 rounded-lg w-full text-white text-center transition-all flex items-center justify-center gap-2"
+            >
+              {deletingAccount ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={18} />
+                  Delete Account
+                </>
+              )}
             </button>
           </div>
         </div>
       </section>
       <BottomNavigation />
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={handleLogoutCancel}>
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Log Out?</h3>
+                  <p className="text-sm text-gray-500">You will need to log in again to access your account.</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleLogoutCancel}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <X size={18} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLogoutConfirm}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <LogOut size={18} />
+                  Log Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteModal && (
+        <>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={handleDeleteCancel}>
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Delete Account?</h3>
+                  <p className="text-sm text-gray-500">
+                    This action <span className="font-semibold text-red-600">cannot be undone</span>. 
+                    All your data, orders, and wallet balance will be permanently deleted.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <X size={18} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-400 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  {deletingAccount ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      Delete Account
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
