@@ -14,6 +14,7 @@ export default function Profile() {
   const [user, setUser] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
+  const [loadingWallet, setLoadingWallet] = useState(true);
 
   useEffect(() => {
     setIsClient(true);
@@ -38,38 +39,65 @@ export default function Profile() {
     }
   }, [isClient, router]);
 
-  // ✅ Fetch wallet balance and overwrite localStorage
+  // ✅ FIXED: Extract userId to separate state to eliminate TypeScript error
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user) return;
+    
+    const userId = user.id; // TypeScript now knows user is not null here
 
     async function fetchWalletBalance() {
       try {
+        setLoadingWallet(true);
         const response = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${user?.id}`
+          `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
         );
         const data = await response.json();
-        console.log("Wallet API:", data);
+        console.log("Wallet API Response:", data);
 
-        if (data.status === "1" && data.wallet_balance) {
-          // Overwrite state with latest backend value
-          setWalletBalance(data.wallet_balance);
-          // Overwrite localStorage with latest value
-          localStorage.setItem("wallet_balance", data.wallet_balance);
+        if (data.status === "1") {
+          // Use backend balance if valid and > 0
+          if (data.wallet_balance && parseFloat(data.wallet_balance) > 0) {
+            setWalletBalance(data.wallet_balance);
+            localStorage.setItem("wallet_balance", data.wallet_balance);
+          } 
+          // Fallback: Calculate from wallets array (type 1=credit(+), type 2=debit(-))
+          else if (data.wallets && Array.isArray(data.wallets)) {
+            const balance = data.wallets.reduce((total: number, wallet: any) => {
+              const amount = parseFloat(wallet.amount) || 0;
+              return wallet.type === "1" ? total + amount : total - amount;
+            }, 0);
+
+            const formattedBalance = Math.max(0, balance).toFixed(2);
+            setWalletBalance(formattedBalance);
+            localStorage.setItem("wallet_balance", formattedBalance);
+            console.log("Calculated balance from transactions:", formattedBalance);
+          } else {
+            fallbackToLocalStorage();
+          }
         } else {
           console.warn("Wallet fetch failed:", data.message);
-          // Optional fallback: localStorage only if backend fails
-          const savedWallet = localStorage.getItem("wallet_balance");
-          if (savedWallet) setWalletBalance(savedWallet);
+          fallbackToLocalStorage();
         }
       } catch (error) {
         console.error("Error fetching wallet balance:", error);
-        const savedWallet = localStorage.getItem("wallet_balance");
-        if (savedWallet) setWalletBalance(savedWallet);
+        fallbackToLocalStorage();
+      } finally {
+        setLoadingWallet(false);
       }
     }
 
+    function fallbackToLocalStorage() {
+      const savedWallet = localStorage.getItem("wallet_balance");
+      if (savedWallet) {
+        setWalletBalance(savedWallet);
+      } else {
+        setWalletBalance("0.00");
+      }
+      setLoadingWallet(false);
+    }
+
     fetchWalletBalance();
-  }, [user?.id]);
+  }, [user]); // ✅ Depend on user object (stable reference)
 
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
@@ -115,7 +143,9 @@ export default function Profile() {
                   <h4>{user.name}</h4>
                   <p>{user.phone}</p>
                 </figcaption>
-                <Link href="/edit-profile"><UserRoundPen /></Link>
+                <Link href="/edit-profile">
+                  <UserRoundPen />
+                </Link>
               </div>
               <div className={styles.profileBottom}>
                 <div className={styles.walletHeading}>
@@ -123,7 +153,12 @@ export default function Profile() {
                   <span>Wallet Balance</span>
                 </div>
                 <h4>
-                  {walletBalance !== null ? `$ ${walletBalance}` : 'Loading...'}
+                  {loadingWallet 
+                    ? 'Loading...' 
+                    : walletBalance !== null 
+                      ? `$${parseFloat(walletBalance || '0').toFixed(2)}` 
+                      : '$0.00'
+                  }
                 </h4>
               </div>
             </div>
@@ -150,7 +185,7 @@ export default function Profile() {
           </nav>
 
           <div className="container-fluid pt-4 px-4 bottomButton fixed">
-            <button className="bg-red-500 px-3 py-3 rounded-lg w-full text-white text-center">
+            <button className="bg-red-500 px-3 py-3 rounded-lg w-full text-white text-center hover:bg-red-600 transition-colors">
               Delete Account
             </button>
           </div>

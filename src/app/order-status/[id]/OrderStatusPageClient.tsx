@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../order-status.module.scss";
 import Image from "next/image";
@@ -24,6 +24,7 @@ interface OrderProduct {
 interface OrderData {
   status: string;
   is_ready: string;
+  square_order_id?: string;
   products?: OrderProduct[];
 }
 
@@ -31,37 +32,143 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<OrderData | null>(null);
+  const [squareStatus, setSquareStatus] = useState<string | null>(null);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+
+  // ------------------------------------------
+  // STATUS MESSAGES - SQUARE ONLY
+  // ------------------------------------------
+  const getStatusMessage = useCallback((status: string | null) => {
+    switch (status) {
+      case "PROPOSED":
+        return "The Bar Has Received Your Order";
+      case "RESERVED":
+        return "The Bar Is Preparing Your Order";
+      case "PREPARED":
+        return "Your Order Is Ready For Pickup";
+      default:
+        return "Your order is being processed";
+    }
+  }, []);
 
   // ------------------------------------------
   // FETCH ORDER DETAILS
   // ------------------------------------------
+  const fetchOrderDetails = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
+        { cache: "no-store" }
+      );
+
+      const data = await res.json();
+
+      if (data.status === "1" && data.order) {
+        return data.order;
+      }
+      return null;
+    } catch (err) {
+      console.error("Order fetch error", err);
+      return null;
+    }
+  }, [id]);
+
+  // ------------------------------------------
+  // FETCH SQUARE ORDER STATUS
+  // ------------------------------------------
+  const fetchSquareStatus = useCallback(async (squareOrderId: string) => {
+    try {
+      const res = await fetch(
+        `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
+      
+      // Handle the new response format: {"status":"1","message":"...","square_order_status":"PREPARED"}
+      if (data.status === "1" && data.square_order_status) {
+        return data.square_order_status;
+      }
+      return null;
+    } catch (err) {
+      console.error("Square status fetch error", err);
+      return null;
+    }
+  }, []);
+
+  // ------------------------------------------
+  // POLLING LOGIC
+  // ------------------------------------------
   useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        const res = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
-          { cache: "no-store" }
-        );
-
-        const data = await res.json();
-
-        if (data.status === "1" && data.order) {
-          setOrder(data.order);
-        } else {
-          setOrder(null);
-        }
-      } catch (err) {
-        console.error("Order fetch error", err);
+    const pollOrderStatus = async () => {
+      const orderData = await fetchOrderDetails();
+      
+      if (!orderData) {
         setOrder(null);
-      } finally {
-        setLoading(false);
+        return;
+      }
+
+      setOrder(orderData);
+
+      // If we have square_order_id, fetch Square status
+      if (orderData.square_order_id) {
+        const newSquareStatus = await fetchSquareStatus(orderData.square_order_id);
+        if (newSquareStatus) {
+          setSquareStatus(newSquareStatus);
+          
+          // Update progress bar mapping
+          if (newSquareStatus === "RESERVED") {
+            orderData.status = "2";
+            orderData.is_ready = "0";
+          } else if (newSquareStatus === "PREPARED") {
+            orderData.status = "2";
+            orderData.is_ready = "1";
+          }
+          
+          setOrder({ ...orderData });
+        }
+      }
+
+      // Stop polling when PREPARED (final state)
+      if (squareStatus === "PREPARED") {
+        stopPolling();
       }
     };
 
-    fetchDetails();
-  }, [id]);
+    const startPolling = async () => {
+      setLoading(true);
+      await pollOrderStatus();
+      setLoading(false);
+      
+      // Start interval polling every 5 seconds (unless already PREPARED)
+      if (squareStatus !== "PREPARED") {
+        const interval = setInterval(pollOrderStatus, 5000);
+        setPollInterval(interval);
+      }
+    };
 
-  const backClick = () => router.back();
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setPollInterval(null);
+      }
+    };
+
+    startPolling();
+
+    // Cleanup
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [id, fetchOrderDetails, fetchSquareStatus, squareStatus]);
+
+  const backClick = () => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+    router.back();
+  };
 
   // ------------------------------------------
   // LOADING
@@ -79,21 +186,6 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
         <div className="pageContainer">
           <h2 className="text-center mt-10 text-red-500">
             Order not found or deleted
-          </h2>
-        </div>
-      </section>
-    );
-  }
-
-  // ------------------------------------------
-  // EXPIRED / INVALID STATUS
-  // ------------------------------------------
-  if (!["0", "1", "2"].includes(order.status)) {
-    return (
-      <section className="pageWrapper hasHeader">
-        <div className="pageContainer">
-          <h2 className="text-center mt-10 text-gray-600">
-            This order is no longer active.
           </h2>
         </div>
       </section>
@@ -119,10 +211,7 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
           </svg>
         </button>
 
-        <Link
-          href="https://liquiditybars.com/faq.html"
-          className="icon_only ml-auto"
-        >
+        <Link href="https://liquiditybars.com/faq.html" className="icon_only ml-auto">
           <EllipsisVertical />
         </Link>
       </header>
@@ -131,15 +220,9 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
-            {/* STATUS TITLE */}
+            {/* STATUS TITLE - SQUARE STATUS ONLY */}
             <h4 className="text-center mb-2">
-              {order.status === "0" && "Your order was placed successfully!"}
-              {order.status === "2" &&
-                order.is_ready === "0" &&
-                "The Bar is Preparing Your Order!"}
-              {order.status === "2" &&
-                order.is_ready === "1" &&
-                "Your order is ready for pickup!"}
+              {getStatusMessage(squareStatus)}
             </h4>
 
             <h5 className="text-center">Please wait near the bar</h5>
@@ -190,7 +273,6 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
                   <h5>
                     {p.quantity} X {p.product_name} <span>({p.unit})</span>
                   </h5>
-
                   <p>
                     Mixer Name: <span>{p.choice_of_mixer_name || "N/A"}</span>
                     <br />

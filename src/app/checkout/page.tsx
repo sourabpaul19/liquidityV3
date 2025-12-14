@@ -1,16 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback, useMemo } from "react";
-import styles from "./checkout.module.scss";
-import Image from "next/image";
-import user from "../../../public/images/3177440.png";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Loader2, Wallet } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
+
+import styles from "./checkout.module.scss";
+import Header from "@/components/common/Header/Header";
+import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
-import CardSelector from "@/components/common/CardSelector/CardSelector";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
-import toast from "react-hot-toast";
+
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+);
 
 interface CartItem {
   id: string;
@@ -30,59 +40,201 @@ interface OldOrder {
   status: string;
 }
 
-const SERVICE_FEE = 1;
-const TAXES_AND_FEES = 3.57;
+interface SavedCard {
+  id: string;
+  stripe_payment_method_id: string;
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+}
 
-export default function Checkout() {
+type PayMode = "wallet" | "new_card" | "saved_card";
+
+// ---------- SMALL COMPONENTS ----------
+
+function SavedCardSelector({
+  cards,
+  selectedId,
+  onSelect,
+}: {
+  cards: SavedCard[];
+  selectedId: string | null;
+  onSelect: (card: SavedCard) => void;
+}) {
+  if (!cards.length) {
+    return (
+      <p className="text-sm text-gray-500 mt-2">
+        No saved cards found. Use a new card to save one.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 mt-3">
+      <h4 className="text-sm font-semibold">Saved cards</h4>
+      {cards.map((card) => (
+        <button
+          key={card.id}
+          type="button"
+          onClick={() => onSelect(card)}
+          className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-left ${
+            selectedId === card.id
+              ? "border-primary bg-primary/5"
+              : "border-gray-200"
+          }`}
+        >
+          <div>
+            <p className="text-sm font-medium capitalize">
+              {card.brand} •••• {card.last4}
+            </p>
+            <p className="text-xs text-gray-500">
+              Expires {card.exp_month}/{card.exp_year}
+            </p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NewCardPaymentForm({
+  clientSecret,
+  amountLabel,
+  onSuccess,
+}: {
+  clientSecret: string | null;
+  amountLabel: string;
+  onSuccess: (paymentIntentId: string) => Promise<void>;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements || !clientSecret) return;
+
+    setProcessing(true);
+
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      setProcessing(false);
+      return;
+    }
+
+    // Standard confirmCardPayment pattern.[web:5]
+    const { error, paymentIntent } = await stripe.confirmCardPayment(
+      clientSecret,
+      {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: localStorage.getItem("user_name") || "",
+            email: localStorage.getItem("user_email") || "",
+          },
+        },
+      }
+    );
+
+    setProcessing(false);
+
+    if (error) {
+      alert(error.message || "Payment failed");
+      return;
+    }
+
+    if (paymentIntent && paymentIntent.status === "succeeded") {
+      await onSuccess(paymentIntent.id);
+    } else {
+      alert("Payment did not complete.");
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+      <div className="p-3 bg-gray-50 border rounded-lg">
+        <CardElement
+          options={{
+            style: {
+              base: {
+                fontSize: "16px",
+                color: "#1f2933",
+                "::placeholder": { color: "#9ca3af" },
+              },
+            },
+          }}
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={!stripe || !clientSecret || processing}
+        className={`w-full py-3 px-4 rounded-lg font-medium transition ${
+          !stripe || !clientSecret || processing
+            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+            : "bg-primary text-white hover:bg-primary/90"
+        }`}
+      >
+        {processing ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Processing…
+          </span>
+        ) : (
+          `Pay ${amountLabel}`
+        )}
+      </button>
+    </form>
+  );
+}
+
+// ---------- MAIN CHECKOUT PAGE ----------
+
+function CheckoutInner() {
   const router = useRouter();
 
-  const [activePickup, setActivePickup] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState("web");
+
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [oldOrders, setOldOrders] = useState<OldOrder[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const [activePickup, setActivePickup] = useState<string | null>(null);
+  const [oldOrders, setOldOrders] = useState<OldOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
+
   const [showAcknowledgement, setShowAcknowledgement] = useState(false);
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
 
-  const userId =
-    typeof window !== "undefined"
-      ? localStorage.getItem("user_id") || ""
-      : "";
-  const deviceId =
-    typeof window !== "undefined"
-      ? localStorage.getItem("device_id") || "web"
-      : "web";
+  // payment modes
+  const [payMode, setPayMode] = useState<PayMode>("wallet");
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [selectedSavedCard, setSelectedSavedCard] =
+    useState<SavedCard | null>(null);
 
-  const cards = [
-    { id: "1", type: "Visa", last4: "2304", image: "/images/visa.png" },
-    { id: "2", type: "MasterCard", last4: "5478", image: "/images/card.png" },
-    { id: "3", type: "Amex", last4: "7821", image: "/images/amex.png" },
-  ];
+  // wallet
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [walletLoading, setWalletLoading] = useState(true);
 
-  // ------- MEMOIZED TOTALS -------
+  // stripe
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [initializingPayment, setInitializingPayment] = useState(false);
 
-  const subtotal = useMemo(
-    () => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [cartItems]
-  );
+  // load base ids
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedUser = localStorage.getItem("user_id");
+    if (storedUser) setUserId(storedUser);
+    const storedDevice = localStorage.getItem("device_id");
+    if (storedDevice) setDeviceId(storedDevice);
+  }, []);
 
-  const tipValue = useMemo(
-    () => (tipIsAmount ? tipAmount : (subtotal * tipPercent) / 100),
-    [tipIsAmount, tipAmount, tipPercent, subtotal]
-  );
-
-  const finalTotalAmount = useMemo(
-    () => Number(subtotal + SERVICE_FEE + TAXES_AND_FEES + tipValue).toFixed(2),
-    [subtotal, tipValue]
-  );
-
-  // ------- FETCH CART -------
-
-  const fetchBackendCartDetails = useCallback(async () => {
-    if (!deviceId) return;
+  // fetch checkout cart (backend temp cart)
+  const fetchCart = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
 
     try {
@@ -93,25 +245,19 @@ export default function Checkout() {
       });
 
       const data = await res.json();
-
       if (data.status === "1" || data.status === 1) {
-        if (Array.isArray(data.cartItems)) {
-          setCartItems(data.cartItems as CartItem[]);
-          const calculatedTotal = data.cartItems.reduce(
-            (sum: number, item: CartItem) => sum + item.price * item.quantity,
-            0
-          );
-          setCartTotal(calculatedTotal);
-        } else {
-          setCartItems([]);
-          setCartTotal(0);
-        }
+        setCartItems(data.cartItems || []);
+        const total = (data.cartItems || []).reduce(
+          (sum: number, item: CartItem) => sum + item.price * item.quantity,
+          0
+        );
+        setCartTotal(total);
       } else {
         setCartItems([]);
         setCartTotal(0);
       }
     } catch (err) {
-      console.error("Failed to fetch cart details:", err);
+      console.error("Backend cart fetch error:", err);
       setCartItems([]);
       setCartTotal(0);
     } finally {
@@ -119,14 +265,9 @@ export default function Checkout() {
     }
   }, [userId, deviceId]);
 
-  // ------- FETCH OLD ORDERS -------
-
+  // fetch old orders
   const fetchOldOrders = useCallback(async () => {
-    if (!userId) {
-      setLoadingOrders(false);
-      setOldOrders([]);
-      return;
-    }
+    if (!userId) return;
     setLoadingOrders(true);
 
     try {
@@ -135,7 +276,7 @@ export default function Checkout() {
       );
       const data = await res.json();
 
-      if (data.status === "1" && Array.isArray(data.orders)) {
+      if ((data.status === "1" || data.status === 1) && Array.isArray(data.orders)) {
         const filtered = data.orders.filter(
           (order: OldOrder) =>
             order.status === "0" ||
@@ -146,102 +287,111 @@ export default function Checkout() {
       } else {
         setOldOrders([]);
       }
-    } catch (e) {
-      console.error("Order fetch error:", e);
+    } catch (err) {
+      console.error("Order fetch error:", err);
       setOldOrders([]);
     } finally {
       setLoadingOrders(false);
     }
   }, [userId]);
 
-  // ------- FETCH DASHBOARD (SHOPS + WALLET) -------
-
-  const fetchDashboardData = useCallback(async () => {
+  // fetch wallet (liquidity cash)
+  const fetchWalletBalance = useCallback(async () => {
     if (!userId) return;
+    setWalletLoading(true);
 
     try {
       const res = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`
+        `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
       );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
-
-      if (data.status === "1") {
-        const shops = Array.isArray(data.shops) ? data.shops : [];
-        const walletBalance = data.wallet_balance ?? 0;
-
-        localStorage.setItem("shops", JSON.stringify(shops));
-        if (shops.length > 0) {
-          // choose first shop by default; you can change this selection later
-          localStorage.setItem("selected_shop", JSON.stringify(shops[0]));
-        }
-        localStorage.setItem("wallet_balance", String(walletBalance));
+      if (data.status === "1" || data.status === 1) {
+        setWalletBalance(Number(data.wallet_balance) || 0);
+      } else {
+        setWalletBalance(0);
       }
-    } catch (e) {
-      console.error("Dashboard fetch error:", e);
+    } catch (err) {
+      console.error("Wallet fetch error:", err);
+      setWalletBalance(0);
+    } finally {
+      setWalletLoading(false);
     }
   }, [userId]);
 
-  // ------- INITIAL LOAD -------
+  // fetch saved cards
+  const fetchSavedCards = useCallback(async () => {
+    if (!userId) return;
 
-  useEffect(() => {
-    if (deviceId) {
-      fetchBackendCartDetails();
-    }
-    if (userId) {
-      fetchOldOrders();
-      fetchDashboardData();
-    }
-  }, [
-    deviceId,
-    userId,
-    fetchBackendCartDetails,
-    fetchOldOrders,
-    fetchDashboardData,
-  ]);
-
-  // ------- DELETE ITEM -------
-
-  const deleteTempCartItem = async (item: CartItem) => {
     try {
-      setLoading(true);
-      const res = await fetch("/api/deleteFromTempCart", {
+      const res = await fetch("/api/savecard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id }),
+        body: JSON.stringify({ user_id: userId }),
       });
 
       const data = await res.json();
-
-      if (data.status === "1" || data.status === 1) {
-        toast.success("Item removed from cart");
-        await fetchBackendCartDetails();
+      if ((data.status === "1" || data.status === 1) && Array.isArray(data.cards)) {
+        setSavedCards(data.cards);
       } else {
-        toast.error(data.message || "Failed to remove item");
+        setSavedCards([]);
       }
     } catch (err) {
-      console.error("deleteFromTempCart error:", err);
-      toast.error("Network error");
+      console.error("Saved card fetch error:", err);
+      setSavedCards([]);
+    }
+  }, [userId]);
+
+  // load everything
+  useEffect(() => {
+    if (!userId) return;
+    fetchCart();
+    fetchOldOrders();
+    fetchWalletBalance();
+    fetchSavedCards();
+  }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance, fetchSavedCards]);
+
+  // totals
+  const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
+  const baseTotal = cartTotal + 2.6 + tipValue;
+  const walletAmountToUse = Math.min(walletBalance, baseTotal);
+  const remainingAmount = Math.max(0, baseTotal - walletBalance);
+  const finalTotalAmount = baseTotal.toFixed(2);
+
+  // cart actions (temp checkout cart)
+  const removeItem = async (itemId: string) => {
+    if (!itemId) return;
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/deleteFromTempCart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId }),
+      });
+
+      const data = await res.json();
+      if (data.status === "1" || data.status === 1) {
+        await fetchCart();
+      } else {
+        alert(data.message || "Could not remove item");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ------- UPDATE QTY -------
-
   const updateQuantity = async (itemId: string, newQty: number) => {
     const item = cartItems.find((i) => i.id === itemId);
     if (!item) return;
-
-    if (newQty === 0) {
-      await deleteTempCartItem(item);
-      return;
-    }
+    if (newQty === 0) return removeItem(itemId);
 
     setLoading(true);
 
     try {
       const params = new URLSearchParams();
-      params.append("user_id", userId);
+      params.append("user_id", userId || "");
       params.append("item_id", itemId);
       params.append("quantity", newQty.toString());
 
@@ -252,21 +402,15 @@ export default function Checkout() {
       });
 
       const data = await res.json();
-
       if (data.status === "1" || data.status === 1) {
-        await fetchBackendCartDetails();
+        await fetchCart();
       } else {
-        toast.error(data.message || "Could not update quantity.");
+        alert(data.message || "Could not update quantity.");
       }
-    } catch (e) {
-      console.error("Update quantity error:", e);
-      toast.error("Update failed");
     } finally {
       setLoading(false);
     }
   };
-
-  // ------- ORDER TYPE -------
 
   const getOrderType = () => {
     if (activePickup === "lounge") return "1";
@@ -275,9 +419,12 @@ export default function Checkout() {
     return "1";
   };
 
-  // ------- CREATE ORDER -------
-
-  const createOrderNow = async () => {
+  // shared createOrder (same as cart page semantics)
+  const createLiquidityOrder = async (
+    transactionId: string,
+    walletUsed: number = 0,
+    paymentType: "1" | "2" = "1"
+  ) => {
     const user_name = localStorage.getItem("user_name") || "";
     const user_email = localStorage.getItem("user_email") || "";
     const user_mobile = localStorage.getItem("user_mobile") || "";
@@ -288,89 +435,173 @@ export default function Checkout() {
     const shop_id = selected_shop?.id || "";
 
     if (!userId || !user_name || !user_email || !user_mobile) {
-      toast.error("User information missing.");
-      return;
-    }
-
-    if (!shop_id) {
-      toast.error("Shop data missing. Please reload.");
+      alert("User information missing.");
       return;
     }
 
     if (!activePickup) {
-      toast.error("Please select pickup location.");
+      alert("Please select pickup location.");
       return;
     }
 
     if (cartItems.length === 0) {
-      toast.error("Cart is empty.");
+      alert("Cart is empty.");
       return;
     }
 
-    const finalTotal = Number(
-      subtotal + SERVICE_FEE + TAXES_AND_FEES + tipValue
-    ).toFixed(2);
+    const onlineAmount = baseTotal - walletUsed;
 
     const formData = new FormData();
     formData.append("name", user_name);
     formData.append("email", user_email);
     formData.append("mobile", user_mobile);
     formData.append("user_id", userId);
-    formData.append("payment_type", "2");
-    formData.append("transaction_id", "");
+    formData.append("payment_type", paymentType); // 1=card, 2=wallet
+    formData.append("transaction_id", transactionId);
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", "");
     formData.append("device_id", deviceId);
     formData.append("order_date", new Date().toISOString().split("T")[0]);
     formData.append("shop_id", shop_id);
-    formData.append("wallet_amount", "0.00");
-    formData.append("online_amount", finalTotal);
+    formData.append("wallet_amount", walletUsed.toFixed(2));
+    formData.append("online_amount", onlineAmount.toFixed(2));
     formData.append("order_type", getOrderType());
     formData.append("tips", Number(tipValue).toFixed(2));
 
     try {
-      setLoading(true);
       const res = await fetch(
         "https://liquiditybars.com/canada/backend/admin/api/createOrder",
         { method: "POST", body: formData }
       );
-
       const data = await res.json();
-      console.log("Create order response:", data);
 
       if (data.status === 1 || data.status === "1") {
-        localStorage.removeItem("liquidity_cart_cache");
-        toast.success("Order created successfully!");
-        const orderId =
-          data.order_id || data.orderId || data.data?.order_id || "";
-        router.push(`/order-success/${orderId}`);
+        router.push(`/order-success/${data.order_id}`);
+        await fetchWalletBalance();
       } else {
-        toast.error(data.message || "Order failed");
+        alert(data.message || "Order failed");
       }
-    } catch (e) {
-      console.error("Create order error:", e);
-      toast.error("Something went wrong.");
-    } finally {
-      setLoading(false);
+    } catch {
+      alert("Something went wrong while creating order.");
     }
   };
 
-  // ------- CHECKOUT HANDLER -------
-
-  const handleCheckout = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const skip = localStorage.getItem("ack_skip_popup");
-    if (!skip) {
-      setShowAcknowledgement(true);
+  // pure wallet
+  const payWithWallet = async () => {
+    if (!userId || !activePickup) {
+      alert("Missing required information.");
+      return;
+    }
+    if (walletBalance < baseTotal) {
+      alert(
+        `Insufficient Liquidity Cash. Need $${baseTotal.toFixed(
+          2
+        )}, have $${walletBalance.toFixed(2)}`
+      );
       return;
     }
 
-    createOrderNow();
+    const transactionId = `LIQUIDITY_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+    await createLiquidityOrder(transactionId, baseTotal, "2");
   };
 
-  // ------- ACK POPUP -------
+  // init Stripe payment (new card)
+  const initNewCardPayment = async () => {
+    if (!userId || !activePickup) {
+      alert("Missing required information.");
+      return false;
+    }
 
+    if (remainingAmount <= 0) {
+      await payWithWallet();
+      return true;
+    }
+
+    setInitializingPayment(true);
+
+    try {
+      const amount = Math.round(remainingAmount * 100);
+      const res = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          currency: "cad",
+          user_id: userId,
+          wallet_used: walletAmountToUse,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.client_secret) {
+        alert(data.error || "Failed to start payment.");
+        setInitializingPayment(false);
+        return false;
+      }
+
+      setClientSecret(data.client_secret);
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert("Failed to start payment.");
+      return false;
+    } finally {
+      setInitializingPayment(false);
+    }
+  };
+
+  // saved card
+  const payWithSavedCard = async () => {
+    if (!selectedSavedCard || !userId || !activePickup) {
+      alert("Please select a saved card and pickup location.");
+      return;
+    }
+
+    if (remainingAmount <= 0) {
+      await payWithWallet();
+      return;
+    }
+
+    const customerId = localStorage.getItem("stripe_customer_id") || "";
+    if (!customerId) {
+      alert("Stripe customer not found.");
+      return;
+    }
+
+    const amount = Math.round(remainingAmount * 100);
+
+    try {
+      const res = await fetch("/api/pay-with-saved-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          currency: "cad",
+          customerId,
+          paymentMethodId: selectedSavedCard.stripe_payment_method_id,
+          wallet_used: walletAmountToUse,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.status === "success" && data.payment_intent_id) {
+        await createLiquidityOrder(
+          data.payment_intent_id,
+          walletAmountToUse,
+          "1"
+        );
+      } else {
+        alert(data.message || "Payment failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Payment failed.");
+    }
+  };
+
+  // acknowledgement
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
@@ -384,9 +615,11 @@ export default function Checkout() {
         <div className="flex flex-col gap-3">
           <button
             className="bg-primary text-white p-3 rounded-lg"
-            onClick={() => {
+            onClick={async () => {
               setShowAcknowledgement(false);
-              createOrderNow();
+              if (payMode === "wallet") await payWithWallet();
+              else if (payMode === "saved_card") await payWithSavedCard();
+              else await initNewCardPayment();
             }}
           >
             I Understand
@@ -394,10 +627,12 @@ export default function Checkout() {
 
           <button
             className="bg-green-600 text-white p-3 rounded-lg"
-            onClick={() => {
+            onClick={async () => {
               localStorage.setItem("ack_skip_popup", "1");
               setShowAcknowledgement(false);
-              createOrderNow();
+              if (payMode === "wallet") await payWithWallet();
+              else if (payMode === "saved_card") await payWithSavedCard();
+              else await initNewCardPayment();
             }}
           >
             Yes, Don't Show Again
@@ -414,47 +649,30 @@ export default function Checkout() {
     </div>
   );
 
-  const handleCardSelect = (card: (typeof cards)[0]) => {
-    console.log("Selected card:", card);
+  const handleCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const skip = localStorage.getItem("ack_skip_popup");
+    if (!skip) {
+      setShowAcknowledgement(true);
+      return;
+    }
+
+    if (payMode === "wallet") await payWithWallet();
+    else if (payMode === "saved_card") await payWithSavedCard();
+    else await initNewCardPayment();
   };
 
-  const handleButtonClick = () => {
-    router.push("/home");
-  };
+  const canUseWallet = walletBalance > 0;
 
   return (
     <>
       {showAcknowledgement && <AcknowledgementPopup />}
 
-      <header className="header">
-        <button
-          type="button"
-          className={styles.icon_only}
-          onClick={handleButtonClick}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#000000"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-        <Link href="" className={styles.user}>
-          <Image alt="User" src={user} />
-        </Link>
-      </header>
+      <Header title="Checkout" />
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
-          {/* PREVIOUS ORDERS */}
+          {/* Previous Orders */}
           <div className="flex flex-col gap-4 p-4">
             {loadingOrders ? (
               <p className="text-gray-500">Loading previous orders...</p>
@@ -465,7 +683,7 @@ export default function Checkout() {
                 <Link
                   key={order.id}
                   href={`/order-status/${order.id}`}
-                  className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-all`}
+                  className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
                 >
                   <div>
                     <h3 className="font-semibold text-lg">{order.unique_id}</h3>
@@ -482,11 +700,13 @@ export default function Checkout() {
             )}
           </div>
 
-          {/* CART ITEMS */}
+          {/* Checkout Items (same as temp cart) */}
           {loading ? (
             <p className="p-4 text-center text-gray-500">Loading cart...</p>
           ) : cartItems.length === 0 ? (
-            <p className="p-4 text-center text-gray-500">Cart is empty</p>
+            <p className="p-4 text-center text-gray-500">
+              No items to checkout
+            </p>
           ) : (
             <>
               {cartItems.map((item) => (
@@ -513,30 +733,34 @@ export default function Checkout() {
                       </p>
                     )}
                   </div>
+
                   <div className={styles.itemRight}>
-                    <h4>${(item.price * item.quantity).toFixed(2)}</h4>
+                    <h4>
+                      {(Number(item.price) * Number(item.quantity)).toFixed(2)}
+                    </h4>
                     <QuantityButton
                       min={0}
                       max={10}
-                      initialValue={item.quantity}
+                      initialValue={Number(item.quantity)}
                       onChange={(val) => updateQuantity(item.id, val)}
-                      onDelete={() => deleteTempCartItem(item)}
+                      onDelete={() => removeItem(item.id)}
                     />
                   </div>
                 </div>
               ))}
 
               <div className={styles.itemCard}>
-                <Link href="/outlet" className={styles.addItemButton}>
+                <Link href="/outlet-menu" className={styles.addItemButton}>
                   + Add Items
                 </Link>
               </div>
             </>
           )}
 
-          {/* PICKUP LOCATION */}
+          {/* Pickup Location */}
           <div className={styles.pickupArea}>
             <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
+
             <div className={`${styles.pickupBlock} flex gap-3`}>
               {[
                 { id: "lounge", label: "1st Floor\nLounge" },
@@ -547,9 +771,9 @@ export default function Checkout() {
                   key={loc.id}
                   type="button"
                   onClick={() => setActivePickup(loc.id)}
-                  className={`${
-                    styles.pickupItem
-                  } ${activePickup === loc.id ? "bg-primary text-white" : ""}`}
+                  className={`${styles.pickupItem} ${
+                    activePickup === loc.id ? "bg-primary text-white" : ""
+                  }`}
                 >
                   {loc.label.split("\n").map((line, i) => (
                     <span key={i} className="block">
@@ -561,74 +785,235 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* BILLING SUMMARY */}
-          <div className={styles.billingArea}>
-            <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
+          {/* Billing + Payment */}
+          <Elements
+            stripe={stripePromise}
+            options={clientSecret ? { clientSecret } : undefined}
+          >
+            <div className={styles.billingArea}>
+              <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
 
-            <div className={styles.billingItem}>
-              <p>Subtotal</p>
-              <p>${subtotal.toFixed(2)}</p>
+              <div className={styles.billingItem}>
+                <p>Subtotal</p>
+                <p>${cartTotal.toFixed(2)}</p>
+              </div>
+
+              {/* Liquidity Cash */}
+              {walletLoading ? (
+                <div className={styles.billingItem}>
+                  <p>Liquidity Cash</p>
+                  <p>Loading...</p>
+                </div>
+              ) : walletBalance > 0 ? (
+                <div className={styles.billingItem}>
+                  <p>Liquidity Cash</p>
+                  <p className="text-green-600 font-semibold">
+                    -${walletAmountToUse.toFixed(2)}{" "}
+                    <span className="text-xs text-gray-500 ml-1">
+                      (${walletBalance.toFixed(2)} available)
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.billingItem}>
+                  <p>Liquidity Cash</p>
+                  <p className="text-gray-500">$0.00</p>
+                </div>
+              )}
+
+              <div className={styles.billingItem}>
+                <p>Taxes & Other Fees</p>
+                <p>$2.60</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <p>Tips</p>
+                <p>${tipValue.toFixed(2)}</p>
+              </div>
+
+              <div className={styles.billingItem}>
+                <h4>Total</h4>
+                <h4>${finalTotalAmount}</h4>
+              </div>
+
+              {/* Payment Mode Toggle */}
+              <div className="mt-6 grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPayMode("wallet")}
+                  disabled={!canUseWallet || walletBalance < baseTotal}
+                  className={`flex items-center gap-2 py-3 px-4 rounded-lg font-medium border transition-all ${
+                    payMode === "wallet"
+                      ? "bg-green-600 text-white border-green-600 shadow-lg"
+                      : !canUseWallet || walletBalance < baseTotal
+                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-green-400 hover:bg-green-50"
+                  }`}
+                >
+                  <Wallet className="w-5 h-5" />
+                  {walletBalance >= baseTotal
+                    ? `Liquidity Cash (Full Coverage $${finalTotalAmount})`
+                    : `Liquidity Cash ($${walletBalance.toFixed(2)} available)`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPayMode("new_card")}
+                  className={`py-3 px-4 rounded-lg font-medium border ${
+                    payMode === "new_card"
+                      ? "bg-primary text-white border-primary shadow-lg"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
+                  }`}
+                >
+                  {remainingAmount > 0
+                    ? `Card ($${remainingAmount.toFixed(2)} + Cash)`
+                    : "Card"}
+                </button>
+
+                {/* Uncomment if you want saved card on checkout too */}
+                {/* <button
+                  type="button"
+                  onClick={() => setPayMode("saved_card")}
+                  className={`py-3 px-4 rounded-lg font-medium border ${
+                    payMode === "saved_card"
+                      ? "bg-primary text-white border-primary shadow-lg"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
+                  }`}
+                >
+                  Saved Card
+                </button> */}
+              </div>
+
+              {/* Saved Cards */}
+              {payMode === "saved_card" && (
+                <SavedCardSelector
+                  cards={savedCards}
+                  selectedId={selectedSavedCard?.id || null}
+                  onSelect={(card) => setSelectedSavedCard(card)}
+                />
+              )}
+
+              {/* New Card Form */}
+              {payMode === "new_card" && clientSecret && (
+                <NewCardPaymentForm
+                  clientSecret={clientSecret}
+                  amountLabel={`$${remainingAmount.toFixed(2)}`}
+                  onSuccess={(paymentIntentId) =>
+                    createLiquidityOrder(
+                      paymentIntentId,
+                      walletAmountToUse,
+                      "1"
+                    )
+                  }
+                />
+              )}
             </div>
+          </Elements>
 
-            <div className={styles.billingItem}>
-              <p>Liquidity Cash</p>
-              <p>-$0.00</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Service Fee</p>
-              <p>${SERVICE_FEE.toFixed(2)}</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Taxes & Other Fees</p>
-              <p>${TAXES_AND_FEES.toFixed(2)}</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <p>Tips</p>
-              <p>${tipValue.toFixed(2)}</p>
-            </div>
-
-            <div className={styles.billingItem}>
-              <h4>Total</h4>
-              <h4>${finalTotalAmount}</h4>
-            </div>
-
-            <CardSelector
-              cards={cards}
-              onSelect={handleCardSelect}
-              defaultCardId="1"
-            />
-          </div>
-
-          {/* TIP SELECTOR */}
+          {/* Tips Selector */}
           <TipsSelector
             value={tipPercent}
             onChange={(val: number, isAmount: boolean) => {
-              if (isAmount) {
-                setTipAmount(val);
-              } else {
-                setTipPercent(val);
-              }
+              if (isAmount) setTipAmount(val);
+              else setTipPercent(val);
               setTipIsAmount(isAmount);
             }}
           />
 
-          {/* CHECKOUT BUTTON */}
+          {/* Checkout Buttons */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
-              <button
-                type="submit"
-                disabled={loading || cartItems.length === 0 || !activePickup}
-                className="bg-primary px-3 py-3 rounded-lg w-full text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Processing..." : "Checkout"}
-              </button>
+              {payMode === "wallet" && (
+                <button
+                  type="submit"
+                  disabled={
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
+                  }
+                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                  }`}
+                >
+                  {walletLoading ? (
+                    <>
+                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
+                      Loading...
+                    </>
+                  ) : (
+                    `Pay Full $${finalTotalAmount} with Liquidity Cash`
+                  )}
+                </button>
+              )}
+
+              {payMode === "new_card" && !clientSecret && (
+                <button
+                  type="submit"
+                  disabled={initializingPayment || !activePickup || cartItems.length === 0}
+                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                    initializingPayment ||
+                    !activePickup ||
+                    cartItems.length === 0
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                  }`}
+                >
+                  {initializingPayment ? (
+                    <>
+                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
+                      Starting payment...
+                    </>
+                  ) : remainingAmount > 0 ? (
+                    `Pay $${remainingAmount.toFixed(2)} (Cash + Card)`
+                  ) : (
+                    `Pay Full $${finalTotalAmount} with Liquidity Cash`
+                  )}
+                </button>
+              )}
+
+              {payMode === "saved_card" && (
+                <button
+                  type="submit"
+                  disabled={
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
+                  }
+                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                  }`}
+                >
+                  {remainingAmount > 0
+                    ? `Pay $${remainingAmount.toFixed(
+                        2
+                      )} with Saved Card (Cash applied)`
+                    : `Pay Full $${finalTotalAmount} with Liquidity Cash`}
+                </button>
+              )}
             </form>
           </div>
         </div>
       </section>
+
+      <BottomNavigation />
     </>
+  );
+}
+
+export default function Checkout() {
+  return (
+    <Elements stripe={stripePromise}>
+      <CheckoutInner />
+    </Elements>
   );
 }
