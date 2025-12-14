@@ -64,7 +64,7 @@ export default function Choose() {
               <p className="text-center">or</p>
 
               <Link
-                href="/new-account"
+                href="/login"
                 className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center"
               >
                 Create Account
