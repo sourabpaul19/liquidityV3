@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import styles from "../order-success.module.scss";
 import Image from "next/image";
-import statusImg from "../../../../public/images/status.png";
 import Link from "next/link";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import styles from "../order-success.module.scss";
+import statusImg from "../../../../public/images/status.png";
 
 // -----------------------------------------
 // TYPES
@@ -25,152 +25,196 @@ interface OrderProduct {
 interface Order {
   id: string;
   outlet_slug?: string;
-  status?: string;       // "1" / "2"
-  is_ready?: string;     // "0" / "1"
-  square_order_id?: string;
+  status?: string;      // "1" | "2"
+  is_ready?: string;    // "0" | "1"
+  sqaure_order_id?: string;
   products?: OrderProduct[];
 }
 
+type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | null;
+
 // -----------------------------------------
-// STATUS MESSAGE (SQUARE)
+// STATUS TEXT
 // -----------------------------------------
-const getStatusMessage = (status: string | null) => {
-  switch (status) {
-    case "PROPOSED":
-      return "The Bar Has Received Your Order";
-    case "RESERVED":
-      return "The Bar Is Preparing Your Order";
-    case "PREPARED":
-      return "Your Order Is Ready For Pickup";
-    default:
-      return "Your order is being processed";
-  }
+const STATUS_MESSAGES: Record<string, string> = {
+  PROPOSED: "The Bar Has Received Your Order",
+  RESERVED: "The Bar Is Preparing Your Order",
+  PREPARED: "Your Order Is Ready For Pickup",
+  null: "Your order is being processed",
 };
 
+const getStatusMessage = (status: SquareStatus) => {
+  const key = status ?? "null";
+  console.log("getStatusMessage key =>", key);
+  return STATUS_MESSAGES[key] ?? STATUS_MESSAGES.null;
+};
+
+// -----------------------------------------
+// COMPONENT
+// -----------------------------------------
 export default function OrderSuccess() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
 
   const [order, setOrder] = useState<Order | null>(null);
+  const [squareStatus, setSquareStatus] = useState<SquareStatus>(null);
   const [loading, setLoading] = useState(true);
-  const [squareStatus, setSquareStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // store single interval id
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ------------------------------------------
-  // HELPERS
-  // ------------------------------------------
-  const clearPolling = () => {
+  const clearPolling = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+  }, []);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     clearPolling();
     if (order?.outlet_slug) {
       router.push(`/outlet-menu/${order.outlet_slug}`);
     } else {
       router.push("/outlet-menu");
     }
-  };
+  }, [order?.outlet_slug, router, clearPolling]);
 
-  // fetch order
-  const fetchOrderDetails = useCallback(async () => {
+  // -----------------------------
+  // API HELPERS
+  // -----------------------------
+  const fetchOrderDetails = useCallback(async (): Promise<Order | null> => {
     try {
       const res = await fetch(
         `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
         { cache: "no-store" }
       );
       const data = await res.json();
+
+      console.log("orderDetails API raw =>", data);
+
       if (data.status === "1" && data.order) {
-        return data.order as Order;
+        const safeOrder: Order = {
+          ...data.order,
+          products: Array.isArray(data.order.products)
+            ? data.order.products
+            : [],
+        };
+        console.log("orderDetails parsed order =>", safeOrder);
+        return safeOrder;
       }
+
       return null;
-    } catch (err) {
-      console.error("Order fetch error", err);
+    } catch (e) {
+      console.error("orderDetails error", e);
       return null;
     }
   }, [id]);
 
-  // fetch square status
-  const fetchSquareStatus = useCallback(async (squareOrderId: string) => {
-    try {
-      const res = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`,
-        { cache: "no-store" }
-      );
-      const data = await res.json();
-      if (data.status === "1" && data.square_order_status) {
-        return data.square_order_status as string;
-      }
-      return null;
-    } catch (err) {
-      console.error("Square status fetch error", err);
-      return null;
-    }
-  }, []);
+  const fetchSquareStatus = useCallback(
+    async (squareOrderId: string): Promise<SquareStatus> => {
+      try {
+        const res = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
 
-  // ------------------------------------------
-  // POLLING EFFECT (1 MINUTE, SINGLE INTERVAL)
-  // ------------------------------------------
+        console.log("squareStatus API raw =>", data);
+
+        if (data.status === "1" && typeof data.square_order_status === "string") {
+          const raw = data.square_order_status as string;
+          console.log("squareStatus value =>", raw);
+          if (raw === "PROPOSED" || raw === "RESERVED" || raw === "PREPARED") {
+            return raw;
+          }
+        }
+
+        return null;
+      } catch (e) {
+        console.error("square status error", e);
+        return null;
+      }
+    },
+    []
+  );
+
+  // -----------------------------
+  // EFFECT: INITIAL LOAD + POLLING
+  // -----------------------------
   useEffect(() => {
     if (!id) return;
 
-    const pollOrderStatus = async () => {
+    let mounted = true;
+
+    const run = async () => {
+      console.log("=== POLL TICK ===");
       const orderData = await fetchOrderDetails();
+
+      if (!mounted) return;
+
+      console.log("poll => orderData:", orderData);
+
       if (!orderData) {
+        setError("Order not found or deleted.");
         setOrder(null);
+        setLoading(false);
         return;
       }
 
-      // base order from backend
-      let updatedOrder: Order = { ...orderData };
-      setOrder(updatedOrder);
+      setError(null);
+      setOrder(orderData);
 
-      // if square order exists, sync status
-      if (orderData.square_order_id) {
-        const sqStatus = await fetchSquareStatus(orderData.square_order_id);
-        if (sqStatus) {
-          setSquareStatus(sqStatus);
-
-          if (sqStatus === "RESERVED") {
-            updatedOrder = { ...updatedOrder, status: "2", is_ready: "0" };
-          } else if (sqStatus === "PREPARED") {
-            updatedOrder = { ...updatedOrder, status: "2", is_ready: "1" };
-          }
-
-          setOrder(updatedOrder);
-        }
+      if (!orderData.sqaure_order_id) {
+        console.log("poll => no square_order_id on order");
+        setSquareStatus(null);
+        setLoading(false);
+        return;
       }
 
-      // stop polling when prepared
-      if (updatedOrder.is_ready === "1") {
+      console.log("poll => square_order_id:", orderData.sqaure_order_id);
+
+      const sq = await fetchSquareStatus(orderData.sqaure_order_id);
+
+      if (!mounted) return;
+
+      console.log("poll => sq status from API:", sq);
+
+      setSquareStatus(sq);
+
+      if (sq === "RESERVED") {
+        const updated = { ...orderData, status: "2", is_ready: "0" };
+        console.log("poll => setOrder RESERVED", updated);
+        setOrder(updated);
+      } else if (sq === "PREPARED") {
+        const updated = { ...orderData, status: "2", is_ready: "1" };
+        console.log("poll => setOrder PREPARED", updated);
+        setOrder(updated);
         clearPolling();
       }
+
+      setLoading(false);
     };
 
-    // first fetch
     setLoading(true);
-    pollOrderStatus().finally(() => setLoading(false));
+    run();
 
-    // start polling only once
     if (!intervalRef.current) {
-      intervalRef.current = setInterval(pollOrderStatus, 30000); // 1 minute
+      intervalRef.current = setInterval(run, 30000);
     }
 
-    // cleanup on unmount
     return () => {
+      mounted = false;
       clearPolling();
     };
-  }, [id, fetchOrderDetails, fetchSquareStatus]);
+  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling]);
 
-  // ------------------------------------------
+  console.log("render => squareStatus:", squareStatus);
+  console.log("render => order:", order);
+
+  // -----------------------------
   // RENDER
-  // ------------------------------------------
+  // -----------------------------
   if (loading) {
     return (
       <section className="pageWrapper hasHeader">
@@ -181,12 +225,12 @@ export default function OrderSuccess() {
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <h2 className="text-center mt-10 text-red-500">
-            Order not found or deleted.
+            {error || "Order not found or deleted."}
           </h2>
         </div>
       </section>
@@ -195,6 +239,7 @@ export default function OrderSuccess() {
 
   return (
     <>
+      {/* HEADER */}
       <header className="header">
         <button className="icon_only" onClick={handleBack}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -216,6 +261,7 @@ export default function OrderSuccess() {
         </Link>
       </header>
 
+      {/* BODY */}
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
@@ -225,7 +271,6 @@ export default function OrderSuccess() {
 
             <h5 className="text-center">Please wait near the bar</h5>
 
-            {/* progress bar driven by status/is_ready */}
             <div className={styles.progress}>
               <div className={`${styles.progressLayer} ${styles.animated}`}>
                 <div className={styles.progressBar}></div>
@@ -262,28 +307,32 @@ export default function OrderSuccess() {
                 <ClockFading /> 3 - 7 minutes
               </p>
 
-              <h4 className="mt-4">Order Details</h4>
+              <h4 className="mt-4 mb-2">Order Details</h4>
 
-              {order.products?.map((p) => (
-                <div
-                  key={p.id}
-                  className="py-4 border-b border-gray-200"
-                >
-                  <h5>
-                    {p.quantity} X {p.product_name}{" "}
-                    <span>({p.unit || "1oz"})</span>
-                  </h5>
-                  <p>
-                    Mixer Name:{" "}
-                    <span>{p.choice_of_mixer_name || "N/A"}</span>
-                    <br />
-                    Additional Shots: <span>{p.shot_count ?? 0}</span>
-                    <br />
-                    Special Instruction:{" "}
-                    <span>{p.special_instruction || "—"}</span>
-                  </p>
-                </div>
-              ))}
+              {order.products && order.products.length > 0 ? (
+                order.products.map((p) => (
+                  <div
+                    key={p.id}
+                    className="py-4 border-b border-gray-200"
+                  >
+                    <h5>
+                      {p.quantity} × {p.product_name}{" "}
+                      <span>({p.unit || "1oz"})</span>
+                    </h5>
+                    <p>
+                      Mixer Name:{" "}
+                      <span>{p.choice_of_mixer_name || "N/A"}</span>
+                      <br />
+                      Additional Shots: <span>{p.shot_count ?? 0}</span>
+                      <br />
+                      Special Instruction:{" "}
+                      <span>{p.special_instruction || "—"}</span>
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p>No items found for this order.</p>
+              )}
             </div>
           </div>
         </div>
