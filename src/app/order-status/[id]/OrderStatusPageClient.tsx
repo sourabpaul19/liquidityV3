@@ -173,7 +173,7 @@ export default function OrderStatusPageClient({ id }: Props) {
 
       // if not yet prepared, begin interval
       if (!intervalRef.current) {
-        intervalRef.current = setInterval(pollOnce, 5000);
+        intervalRef.current = setInterval(pollOnce, 10000);
       }
     };
 

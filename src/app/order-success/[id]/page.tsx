@@ -200,7 +200,7 @@ export default function OrderSuccess() {
     run();
 
     if (!intervalRef.current) {
-      intervalRef.current = setInterval(run, 5000);
+      intervalRef.current = setInterval(run, 10000);
     }
 
     return () => {
