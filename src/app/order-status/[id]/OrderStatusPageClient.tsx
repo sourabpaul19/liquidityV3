@@ -29,7 +29,7 @@ interface OrderData {
   products?: OrderProduct[];
 }
 
-type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | null;
+type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | null;
 
 // ------------------------------------------
 // STATUS MESSAGE (SQUARE)
@@ -42,6 +42,8 @@ const getStatusMessage = (status: SquareStatus) => {
       return "The Bar Is Preparing Your Order";
     case "PREPARED":
       return "Your Order Is Ready For Pickup";
+    case "COMPLETED":
+      return "Your Order Has Been Collected";
     default:
       return "Your order is being processed";
   }
@@ -116,8 +118,13 @@ export default function OrderStatusPageClient({ id }: Props) {
 
         if (data.status === "1" && typeof data.square_order_status === "string") {
           const raw = data.square_order_status as string;
-          if (raw === "PROPOSED" || raw === "RESERVED" || raw === "PREPARED") {
-            return raw;
+          if (
+            raw === "PROPOSED" ||
+            raw === "RESERVED" ||
+            raw === "PREPARED" ||
+            raw === "COMPLETED"
+          ) {
+            return raw as SquareStatus;
           }
         }
         return null;
@@ -153,14 +160,19 @@ export default function OrderStatusPageClient({ id }: Props) {
     const sq = await fetchSquareOrderStatus(orderData.sqaure_order_id);
     setSquareStatus(sq);
 
-    // reflect into order flags if you still want to use them elsewhere
     if (sq === "RESERVED") {
       setOrder({ ...orderData, status: "2", is_ready: "0" });
     } else if (sq === "PREPARED") {
       setOrder({ ...orderData, status: "2", is_ready: "1" });
-      clearPolling(); // final state, stop polling
+      // keep polling so we can catch COMPLETED
+    } else if (sq === "COMPLETED") {
+      setOrder({ ...orderData, status: "2", is_ready: "1" });
+
+      clearPolling();
+      // redirect to order details page (adjust route as needed)
+      router.push(`/order-details/${id}`);
     }
-  }, [fetchOrderDetails, fetchSquareOrderStatus, clearPolling]);
+  }, [fetchOrderDetails, fetchSquareOrderStatus, clearPolling, router, id]);
 
   useEffect(() => {
     let mounted = true;
@@ -171,7 +183,6 @@ export default function OrderStatusPageClient({ id }: Props) {
       if (!mounted) return;
       setLoading(false);
 
-      // if not yet prepared, begin interval
       if (!intervalRef.current) {
         intervalRef.current = setInterval(pollOnce, 10000);
       }
@@ -226,7 +237,10 @@ export default function OrderStatusPageClient({ id }: Props) {
           </svg>
         </button>
 
-        <Link href="https://liquiditybars.com/faq.html" className="icon_only ml-auto">
+        <Link
+          href="https://liquiditybars.com/faq.html"
+          className="icon_only ml-auto"
+        >
           <EllipsisVertical />
         </Link>
       </header>
@@ -244,42 +258,46 @@ export default function OrderStatusPageClient({ id }: Props) {
 
             {/* PROGRESS BAR: driven only by squareStatus */}
             <div className={styles.progress}>
-  {/* 1. PROPOSED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "PROPOSED"
-        ? styles.animated
-        : squareStatus === "RESERVED" || squareStatus === "PREPARED"
-        ? styles.completed
-        : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
+              {/* 1. PROPOSED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "PROPOSED"
+                    ? styles.animated
+                    : squareStatus === "RESERVED" ||
+                      squareStatus === "PREPARED" ||
+                      squareStatus === "COMPLETED"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
 
-  {/* 2. RESERVED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "RESERVED"
-        ? styles.animated
-        : squareStatus === "PREPARED"
-        ? styles.completed
-        : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
+              {/* 2. RESERVED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "RESERVED"
+                    ? styles.animated
+                    : squareStatus === "PREPARED" ||
+                      squareStatus === "COMPLETED"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
 
-  {/* 3. PREPARED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "PREPARED" ? styles.animated : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
-</div>
-
+              {/* 3. PREPARED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "PREPARED" || squareStatus === "COMPLETED"
+                    ? styles.animated
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
+            </div>
 
             {/* STATUS IMAGE */}
             <div className={styles.successIcon}>

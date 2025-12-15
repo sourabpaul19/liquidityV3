@@ -53,12 +53,12 @@ export default function OrderDetails() {
   useEffect(() => {
     const fetchOrderDetails = async () => {
       if (!id) return;
-      
+
       try {
         setLoading(true);
         const res = await fetch(
           `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
-          { cache: 'no-store' }
+          { cache: "no-store" }
         );
         const data = await res.json();
 
@@ -79,7 +79,9 @@ export default function OrderDetails() {
 
   // Fetch and poll Square order status
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    if (!order?.sqaure_order_id) return;
+
+    let interval: NodeJS.Timeout | undefined;
 
     const fetchSquareStatus = async () => {
       if (!order?.sqaure_order_id) return;
@@ -87,23 +89,33 @@ export default function OrderDetails() {
       try {
         const res = await fetch(
           `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`,
-          { cache: 'no-store' }
+          { cache: "no-store" }
         );
         const data = await res.json();
 
-        // Handle API response: {"status":"1","message":"...","square_order_status":"PROPOSED"}
         if (data.status === "1" && data.square_order_status) {
-          setOrder(prev => prev ? { ...prev, square_status: data.square_order_status } : null);
+          const status = String(data.square_order_status).toUpperCase();
+          setOrder((prev) =>
+            prev ? { ...prev, square_status: status } : null
+          );
+
+          // Stop polling when Square state is final
+          if (status === "COMPLETED" || status === "CANCELED" || status === "FAILED") {
+            if (interval) {
+              clearInterval(interval);
+              interval = undefined;
+            }
+          }
         }
       } catch (error) {
         console.error("Square status fetch failed:", error);
       }
     };
 
-    if (order?.sqaure_order_id) {
-      fetchSquareStatus(); // Initial fetch
-      interval = setInterval(fetchSquareStatus, 10000); // Poll every 10 seconds
-    }
+    // initial fetch
+    fetchSquareStatus();
+    // poll every 10 seconds until a final state
+    interval = setInterval(fetchSquareStatus, 10000);
 
     return () => {
       if (interval) clearInterval(interval);
@@ -124,7 +136,7 @@ export default function OrderDetails() {
     );
   }
 
-  // Square status mapping (exclusive - no backend fallback)
+  // Square status mapping (now includes COMPLETED)
   const getSquareStatusLabel = (squareStatus?: string) => {
     if (!squareStatus) return "🕒 Checking Square status...";
 
@@ -135,12 +147,17 @@ export default function OrderDetails() {
         return "Preparing";
       case "PREPARED":
         return "Ready";
+      case "COMPLETED":
+        return "Completed";
+      case "CANCELED":
+        return "Canceled";
+      case "FAILED":
+        return "Failed";
       default:
         return `Square: ${squareStatus}`;
     }
   };
 
-  // Order type mapping
   const getOrderTypeLabel = (type: string) => {
     switch (type) {
       case "1":
@@ -154,7 +171,6 @@ export default function OrderDetails() {
     }
   };
 
-  // Payment type mapping
   const getPaymentTypeLabel = (type: string) => {
     switch (type) {
       case "1":
@@ -171,8 +187,8 @@ export default function OrderDetails() {
     const date = new Date(created_at.replace(" ", "T"));
     return date.toLocaleDateString("en-US", {
       month: "long",
-      day: "numeric", 
-      year: "numeric"
+      day: "numeric",
+      year: "numeric",
     });
   };
 
@@ -240,7 +256,6 @@ export default function OrderDetails() {
                   <p>Order ID</p>
                   <h5>{order.unique_id}</h5>
                 </div>
-                {/* ✅ Square Status Only */}
                 <div className={styles.faqItem}>
                   <p>Status</p>
                   <h5>{getSquareStatusLabel(order.square_status)}</h5>

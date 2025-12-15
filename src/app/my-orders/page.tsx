@@ -1,20 +1,19 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
+import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import styles from "./my-orders.module.scss";
-import Header from '@/components/common/Header/Header';
-import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigation';
-import Link from 'next/link';
+import Header from "@/components/common/Header/Header";
+import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import Link from "next/link";
 
 interface Order {
   id: string;
   total_amount: string;
   order_date: string;
   created_at: string;
-  // status: string; // ❌ no longer needed if you fully move to Square
   square_status?: string;
-  sqaure_order_id?: string; // if you have it on the order list response
+  sqaure_order_id?: string;
   shop: {
     name: string;
     image: string;
@@ -26,7 +25,9 @@ export default function MyOrders() {
   const [loading, setLoading] = useState(true);
 
   // Fetch Square status for a specific Square order id
-  const fetchSquareStatus = async (squareOrderId: string): Promise<string | null> => {
+  const fetchSquareStatus = async (
+    squareOrderId: string
+  ): Promise<string | null> => {
     try {
       const url = `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`;
       const res = await fetch(url);
@@ -37,7 +38,10 @@ export default function MyOrders() {
       }
       return null;
     } catch (error) {
-      console.error(`Error fetching Square status for order ${squareOrderId}:`, error);
+      console.error(
+        `Error fetching Square status for order ${squareOrderId}:`,
+        error
+      );
       return null;
     }
   };
@@ -45,21 +49,22 @@ export default function MyOrders() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const userId = localStorage.getItem('user_id');
+        const userId = localStorage.getItem("user_id");
         if (!userId) {
-          console.error('No user ID found');
+          console.error("No user ID found");
           setLoading(false);
           return;
         }
 
-        const res = await fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`);
+        const res = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`
+        );
         const data = await res.json();
 
         if (data.status === "1" && data.orders) {
-          // For each order, call the Square status API using its square_order_id
           const ordersWithSquareStatus = await Promise.all(
             data.orders.map(async (order: Order) => {
-              const squareOrderId = order.sqaure_order_id; // ensure this matches backend key
+              const squareOrderId = order.sqaure_order_id;
               if (!squareOrderId) return order;
 
               const squareStatus = await fetchSquareStatus(squareOrderId);
@@ -75,7 +80,7 @@ export default function MyOrders() {
           setOrders([]);
         }
       } catch (error) {
-        console.error('Error fetching orders:', error);
+        console.error("Error fetching orders:", error);
       } finally {
         setLoading(false);
       }
@@ -87,14 +92,16 @@ export default function MyOrders() {
   // Only Square → UI text mapping
   const getOrderStatus = (square_status?: string) => {
     switch (square_status) {
-      case 'PROPOSED':
-        return 'Received';
-      case 'RESERVED':
-        return 'Preparing';
-      case 'PREPARED':
-        return 'Ready';
+      case "PROPOSED":
+        return "Received";
+      case "RESERVED":
+        return "Preparing";
+      case "PREPARED":
+        return "Ready";
+      case "COMPLETED":
+        return "Completed";
       default:
-        return 'Pending';
+        return "Pending";
     }
   };
 
@@ -105,7 +112,7 @@ export default function MyOrders() {
     return date.toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
-      year: "numeric"
+      year: "numeric",
     });
   };
 
@@ -115,9 +122,13 @@ export default function MyOrders() {
       <section className="pageWrapper hasHeader">
         <div className="pageContainer py-4">
           {loading ? (
-            <div className="text-center py-10 text-gray-500">Loading orders...</div>
+            <div className="text-center py-10 text-gray-500">
+              Loading orders...
+            </div>
           ) : orders.length === 0 ? (
-            <div className="text-center py-10 text-gray-500">No orders found</div>
+            <div className="text-center py-10 text-gray-500">
+              No orders found
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
               {orders.map((order) => (
@@ -125,8 +136,8 @@ export default function MyOrders() {
                   <div className="flex gap-4 p-4 justify-between items-center">
                     <figure className="relative w-16 h-16 rounded overflow-hidden flex-shrink-0">
                       <Image
-                        src={order.shop?.image || '/images/bar.jpg'}
-                        alt={order.shop?.name || 'Shop'}
+                        src={order.shop?.image || "/images/bar.jpg"}
+                        alt={order.shop?.name || "Shop"}
                         fill
                         className="object-cover"
                       />
@@ -146,7 +157,10 @@ export default function MyOrders() {
                     <div className="text-primary font-medium">
                       {getOrderStatus(order.square_status)}
                     </div>
-                    <Link href={`/order-details/${order.id}`} className="text-primary font-medium">
+                    <Link
+                      href={`/order-details/${order.id}`}
+                      className="text-primary font-medium"
+                    >
                       View Details
                     </Link>
                   </div>

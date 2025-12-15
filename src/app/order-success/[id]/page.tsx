@@ -25,13 +25,13 @@ interface OrderProduct {
 interface Order {
   id: string;
   outlet_slug?: string;
-  status?: string;      // "1" | "2"
-  is_ready?: string;    // "0" | "1"
+  status?: string; // "1" | "2"
+  is_ready?: string; // "0" | "1"
   sqaure_order_id?: string;
   products?: OrderProduct[];
 }
 
-type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | null;
+type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | null;
 
 // -----------------------------------------
 // STATUS TEXT
@@ -40,12 +40,12 @@ const STATUS_MESSAGES: Record<string, string> = {
   PROPOSED: "The Bar Has Received Your Order",
   RESERVED: "The Bar Is Preparing Your Order",
   PREPARED: "Your Order Is Ready For Pickup",
+  COMPLETED: "Your Order Has Been Collected",
   null: "Your order is being processed",
 };
 
 const getStatusMessage = (status: SquareStatus) => {
   const key = status ?? "null";
-  console.log("getStatusMessage key =>", key);
   return STATUS_MESSAGES[key] ?? STATUS_MESSAGES.null;
 };
 
@@ -91,8 +91,6 @@ export default function OrderSuccess() {
       );
       const data = await res.json();
 
-      console.log("orderDetails API raw =>", data);
-
       if (data.status === "1" && data.order) {
         const safeOrder: Order = {
           ...data.order,
@@ -100,7 +98,6 @@ export default function OrderSuccess() {
             ? data.order.products
             : [],
         };
-        console.log("orderDetails parsed order =>", safeOrder);
         return safeOrder;
       }
 
@@ -120,13 +117,16 @@ export default function OrderSuccess() {
         );
         const data = await res.json();
 
-        console.log("squareStatus API raw =>", data);
-
         if (data.status === "1" && typeof data.square_order_status === "string") {
           const raw = data.square_order_status as string;
-          console.log("squareStatus value =>", raw);
-          if (raw === "PROPOSED" || raw === "RESERVED" || raw === "PREPARED") {
-            return raw;
+
+          if (
+            raw === "PROPOSED" ||
+            raw === "RESERVED" ||
+            raw === "PREPARED" ||
+            raw === "COMPLETED"
+          ) {
+            return raw as SquareStatus;
           }
         }
 
@@ -148,12 +148,9 @@ export default function OrderSuccess() {
     let mounted = true;
 
     const run = async () => {
-      console.log("=== POLL TICK ===");
       const orderData = await fetchOrderDetails();
 
       if (!mounted) return;
-
-      console.log("poll => orderData:", orderData);
 
       if (!orderData) {
         setError("Order not found or deleted.");
@@ -166,31 +163,30 @@ export default function OrderSuccess() {
       setOrder(orderData);
 
       if (!orderData.sqaure_order_id) {
-        console.log("poll => no square_order_id on order");
         setSquareStatus(null);
         setLoading(false);
         return;
       }
 
-      console.log("poll => square_order_id:", orderData.sqaure_order_id);
-
       const sq = await fetchSquareStatus(orderData.sqaure_order_id);
 
       if (!mounted) return;
-
-      console.log("poll => sq status from API:", sq);
 
       setSquareStatus(sq);
 
       if (sq === "RESERVED") {
         const updated = { ...orderData, status: "2", is_ready: "0" };
-        console.log("poll => setOrder RESERVED", updated);
         setOrder(updated);
       } else if (sq === "PREPARED") {
         const updated = { ...orderData, status: "2", is_ready: "1" };
-        console.log("poll => setOrder PREPARED", updated);
+        setOrder(updated);
+        // keep polling so we can catch COMPLETED
+      } else if (sq === "COMPLETED") {
+        const updated = { ...orderData, status: "2", is_ready: "1" };
         setOrder(updated);
         clearPolling();
+        // redirect to order details page (adjust route if needed)
+        router.push(`/order-details/${orderData.id}`);
       }
 
       setLoading(false);
@@ -207,10 +203,7 @@ export default function OrderSuccess() {
       mounted = false;
       clearPolling();
     };
-  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling]);
-
-  console.log("render => squareStatus:", squareStatus);
-  console.log("render => order:", order);
+  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling, router]);
 
   // -----------------------------
   // RENDER
@@ -270,44 +263,47 @@ export default function OrderSuccess() {
             </h4>
 
             <h5 className="text-center">Please wait near the bar</h5>
-<div className={styles.progress}>
-  {/* 1. PROPOSED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "PROPOSED"
-        ? styles.animated
-        : squareStatus === "RESERVED" || squareStatus === "PREPARED"
-        ? styles.completed
-        : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
 
-  {/* 2. RESERVED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "RESERVED"
-        ? styles.animated
-        : squareStatus === "PREPARED"
-        ? styles.completed
-        : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
+            <div className={styles.progress}>
+              {/* 1. PROPOSED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "PROPOSED"
+                    ? styles.animated
+                    : squareStatus === "RESERVED" ||
+                      squareStatus === "PREPARED" ||
+                      squareStatus === "COMPLETED"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
 
-  {/* 3. PREPARED */}
-  <div
-    className={`${styles.progressLayer} ${
-      squareStatus === "PREPARED" ? styles.animated : ""
-    }`}
-  >
-    <div className={styles.progressBar}></div>
-  </div>
-</div>
+              {/* 2. RESERVED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "RESERVED"
+                    ? styles.animated
+                    : squareStatus === "PREPARED" || squareStatus === "COMPLETED"
+                    ? styles.completed
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
 
-
+              {/* 3. PREPARED */}
+              <div
+                className={`${styles.progressLayer} ${
+                  squareStatus === "PREPARED" || squareStatus === "COMPLETED"
+                    ? styles.animated
+                    : ""
+                }`}
+              >
+                <div className={styles.progressBar}></div>
+              </div>
+            </div>
 
             <div className={styles.successIcon}>
               <Image src={statusImg} alt="Order status" fill />

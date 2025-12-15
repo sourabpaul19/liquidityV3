@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Thumbs, Navigation, Autoplay } from 'swiper/modules';
 import { useRouter } from 'next/navigation';
@@ -32,8 +32,14 @@ interface Shop {
 }
 
 interface Order {
-  id: number;
-  status: number;
+  id: string | number;
+  status: number | string;
+  sqaure_order_id?: string;
+}
+
+interface OrderResponse {
+  status: string;
+  orders: Order[];
 }
 
 // --------------------------------
@@ -47,14 +53,81 @@ export default function HomePage() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [ongoingOrder, setOngoingOrder] = useState<Order | null>(null);
 
   const [showDistanceModal, setShowDistanceModal] = useState(false);
   const [tempSelectedDistance, setTempSelectedDistance] = useState<{ id: number; name: string } | null>(null);
 
-  const [ongoingOrder, setOngoingOrder] = useState<Order | null>(null);
+  // Polling refs
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
   // --------------------------------
-  // 🟦 Fetch Dashboard + Orders
+  // 🟦 Find LAST active order (not COMPLETED)
+  // --------------------------------
+  const findLastActiveOrder = useCallback(async (orders: Order[]): Promise<Order | null> => {
+    const activeOrders: Order[] = [];
+    
+    // Check each order with status [0,1,2]
+    for (const order of orders.filter(o => [0, 1, 2].includes(Number(o.status)))) {
+      try {
+        // Skip if no sqaure_order_id
+        if (!order.sqaure_order_id) {
+          console.log(`Order ${order.id} skipped - no sqaure_order_id`);
+          continue;
+        }
+
+        // Check Square status
+        const squareRes = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`
+        );
+        const squareData = await squareRes.json();
+
+        // Add to active list if NOT COMPLETED
+        if (squareData.status === '1' && squareData.square_order_status !== 'COMPLETED') {
+          console.log(`Order ${order.id} is ACTIVE: ${squareData.square_order_status}`);
+          activeOrders.push(order);
+        } else {
+          console.log(`Order ${order.id} is COMPLETED: ${squareData.square_order_status}`);
+        }
+      } catch (err) {
+        console.warn(`Square status check failed for order ${order.id}:`, err);
+        // Skip failed checks - don't treat as active
+        continue;
+      }
+    }
+
+    // Return LAST active order (most recent)
+    return activeOrders.length > 0 ? activeOrders[activeOrders.length - 1] : null;
+  }, []);
+
+  // --------------------------------
+  // 🟦 Poll for order updates every 10 seconds
+  // --------------------------------
+  const pollForOrders = useCallback(async () => {
+    if (!isMountedRef.current) return;
+
+    try {
+      const userId = localStorage.getItem('user_id');
+      if (!userId) return;
+
+      const orderRes = await fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`);
+      const orderData: OrderResponse = await orderRes.json();
+
+      if (orderData.status === '1' && Array.isArray(orderData.orders)) {
+        console.log('🔄 Polling orders...');
+        const lastActiveOrder = await findLastActiveOrder(orderData.orders);
+        setOngoingOrder(lastActiveOrder);
+        
+        console.log('Last active order:', lastActiveOrder?.id || 'None');
+      }
+    } catch (err) {
+      console.error('Polling error:', err);
+    }
+  }, [findLastActiveOrder]);
+
+  // --------------------------------
+  // 🟦 Initial fetch + setup polling
   // --------------------------------
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -65,13 +138,15 @@ export default function HomePage() {
           return;
         }
 
+        setOngoingOrder(null);
+
         const [dashboardRes, orderRes] = await Promise.all([
           fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
           fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
         ]);
 
         const dashboardData = await dashboardRes.json();
-        const orderData = await orderRes.json();
+        const orderData: OrderResponse = await orderRes.json();
 
         // Dashboard data
         if (dashboardData.status === '1' || dashboardData.status === 1) {
@@ -85,25 +160,33 @@ export default function HomePage() {
           setError(dashboardData.message || 'Failed to load data');
         }
 
-        // Active order
+        // 🟦 Initial active order check
         if (orderData.status === '1' && Array.isArray(orderData.orders)) {
-          const activeOrder = orderData.orders.find(
-            (o: Order) => [0, 1, 2].includes(Number(o.status))
-          );
-          if (activeOrder) {
-            setOngoingOrder(activeOrder);
-          }
+          const lastActiveOrder = await findLastActiveOrder(orderData.orders);
+          setOngoingOrder(lastActiveOrder);
         }
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Something went wrong while fetching data');
+        setOngoingOrder(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
-  }, [router]);
+
+    // 🟦 Start polling every 10 seconds
+    intervalRef.current = setInterval(pollForOrders, 10000);
+
+    return () => {
+      // Cleanup
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      isMountedRef.current = false;
+    };
+  }, [router, findLastActiveOrder, pollForOrders]);
 
   // --------------------------------
   // 🟦 Store selected shop
@@ -142,12 +225,7 @@ export default function HomePage() {
     <>
       <Header buttonType="menu" />
       
-      <section
-  className={`pageWrapper hasHeader hasFooter ${
-    ongoingOrder ? "hasBottomNav" : ""
-  }`}
->
-
+      <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer py-4">
 
           {/* 🟦 Banner Slider */}
@@ -178,14 +256,13 @@ export default function HomePage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 px-4">
-            <Link href="/my-orders" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
+            <Link href="/ongoing-orders" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
               Ongoing and Past Orders
             </Link>
           </div>
 
           {/* 🟦 Bars Section */}
           <div className="container-fluid mt-6">
-
             <div className="sectionHeading flex justify-between items-center">
               <h4 className="section_title">Bars</h4>
               <button className={styles.mixerButton} onClick={() => setShowDistanceModal(true)}>
@@ -271,7 +348,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 🟦 Sticky Active Order */}
+        {/* 🟦 Sticky Active Order - UPDATES EVERY 10s */}
         {ongoingOrder && (
           <Link href={`/order-status/${ongoingOrder.id}`} className={styles.stickyMessage}>
             <p>You have an Order In-Progress. Click to see your order status.</p>

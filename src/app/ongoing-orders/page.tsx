@@ -1,49 +1,273 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChevronRight } from 'lucide-react';
-import styles from './ongoing-orders.module.scss'; // create this file or adjust path
+import styles from './ongoing-orders.module.scss';
 import Header from '@/components/common/Header/Header';
+
+interface Order {
+  id: string;
+  total_amount: string;
+  order_date: string;
+  created_at: string;
+  square_status?: string;
+  sqaure_order_id?: string;
+  shop: {
+    name: string;
+    image: string;
+  };
+}
 
 export default function OngoingOrders() {
   const router = useRouter();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    router.push('/outlet');
+  // Fetch Square status for a specific Square order id
+  const fetchSquareStatus = async (
+    squareOrderId: string
+  ): Promise<string | null> => {
+    try {
+      const url = `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`Square status HTTP ${res.status} for ${squareOrderId}`);
+        return null;
+      }
+      
+      const data = await res.json();
+      console.log(`Square status for ${squareOrderId}:`, data);
+
+      if (data.status === "1" && data.square_order_status) {
+        return data.square_order_status as string;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching Square status for ${squareOrderId}:`, error);
+      return null;
+    }
   };
 
-  const orders = [
-    { id: 1, orderid: 'LIQ-241136', title: 'Casa Mezcal', ordertime: 'Oct 10, 2025 | 20:01', orderStatus: 'Order Received' },
-    { id: 2, orderid: 'LIQ-241137', title: 'Bar Azul', ordertime: 'Oct 12, 2025 | 19:45', orderStatus: 'Preparing Order' },
-    { id: 3, orderid: 'LIQ-241138', title: 'Sky Lounge', ordertime: 'Oct 14, 2025 | 22:15', orderStatus: 'Ready for Pickup' },
-  ];
+  const fetchOngoingOrders = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+    
+    try {
+      const userId = localStorage.getItem("user_id");
+      console.log('🔄 Fetching orders for user:', userId);
+      
+      if (!userId) {
+        setError("No user ID found. Please login again.");
+        if (isInitial) setLoading(false);
+        else setRefreshing(false);
+        return;
+      }
+
+      const res = await fetch(
+        `https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`,
+        { 
+          cache: 'no-store',
+          next: { revalidate: 0 }
+        }
+      );
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const data = await res.json();
+      console.log('📋 Order list response:', data);
+
+      if (data.status === "1" && data.orders && data.orders.length > 0) {
+        console.log(`✅ Found ${data.orders.length} orders`);
+
+        // Filter for ongoing orders only (not COMPLETED)
+        const ongoingOrders = data.orders.filter((order: any) => {
+          const status = order.square_status || 'PENDING';
+          const isOngoing = status.toUpperCase() !== 'COMPLETED';
+          console.log(`Order ${order.id}: ${status} → ${isOngoing ? 'SHOW' : 'HIDE'}`);
+          return isOngoing;
+        });
+
+        console.log(`🎯 ${ongoingOrders.length} ongoing orders after filter`);
+
+        // ALWAYS fetch fresh Square status for accurate first load
+        const ordersWithSquareStatus = await Promise.all(
+          ongoingOrders.map(async (order: Order) => {
+            console.log(`🔍 Checking Square status for ${order.id} (${order.sqaure_order_id})`);
+            
+            let finalStatus = order.square_status || 'PENDING';
+            const squareOrderId = order.sqaure_order_id;
+            
+            if (squareOrderId) {
+              const squareStatus = await fetchSquareStatus(squareOrderId);
+              if (squareStatus) {
+                finalStatus = squareStatus;
+                console.log(`✅ Updated ${order.id} to Square status: ${squareStatus}`);
+              }
+            }
+            
+            return {
+              ...order,
+              square_status: finalStatus,
+            };
+          })
+        );
+
+        console.log('🎉 Final orders with status:', ordersWithSquareStatus);
+        setOrders(ordersWithSquareStatus);
+      } else {
+        console.log('❌ No orders found:', data.message || data);
+        setOrders([]);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching ongoing orders:", error);
+      setError(`Failed to load orders: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Initial load + fetch Square status immediately
+  useEffect(() => {
+    fetchOngoingOrders(true);
+  }, [fetchOngoingOrders]);
+
+  // 10 second refresh interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOngoingOrders(false);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [fetchOngoingOrders]);
+
+  const getOrderStatus = (square_status?: string) => {
+    const status = (square_status || 'PENDING').toUpperCase();
+    switch (status) {
+      case "PROPOSED":
+        return "Received";
+      case "RESERVED":
+        return "Preparing";
+      case "PREPARED":
+        return "Ready";
+      case "COMPLETED":
+        return "Completed";
+      default:
+        return "Received";
+    }
+  };
+
+  const getFormattedDateTime = (created_at: string) => {
+    if (!created_at) return "N/A";
+    const date = new Date(created_at.replace(" ", "T"));
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }) + " | " + date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  if (loading) {
+    return (
+      <>
+        <Header title="Ongoing Orders" />
+        <section className="pageWrapper hasHeader">
+          <div className='pageContainer'>
+            <div className="flex flex-col gap-4 p-4">
+              <div className="text-center py-10 text-gray-500">
+                Loading ongoing orders...
+              </div>
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
-    <Header title="Ongoing Orders" />
-    <section className="pageWrapper hasHeader">
+      <Header title="Ongoing Orders" />
+      <section className="pageWrapper hasHeader">
         <div className='pageContainer'>
-      <div className="flex flex-col gap-4 p-4">
-        {orders.map((order) => (
-          <Link key={order.id} href={`/order-status/`} className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}>
-            <div>
-              <h3 className="font-semibold text-lg">
-                {order.orderid} - {order.title}
-              </h3>
-              <p className="text-sm text-gray-600">
-                {order.ordertime} - <span className="text-primary font-medium">{order.orderStatus}</span>
-              </p>
-            </div>
-            <ChevronRight size={22} color="gray" />
-          </Link>
-        ))}
-      </div>
-      </div>
-    </section>
+          <div className="flex flex-col gap-4 p-4">
+            {/* Error display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4 text-sm">
+                {error}
+                <button 
+                  onClick={() => fetchOngoingOrders(false)}
+                  className="ml-2 underline hover:no-underline"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Refresh indicator */}
+            {/* {refreshing && !loading && (
+              <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span>Updating status...</span>
+              </div>
+            )} */}
+            
+            {orders.length === 0 ? (
+              <div className="text-center py-10 text-gray-500">
+                No ongoing orders
+                {refreshing && (
+                  <div className="text-xs mt-2 opacity-75">
+                    Auto-refreshing every 10 seconds...
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {orders.map((order) => (
+                  <Link 
+                    key={order.id} 
+                    href={`/order-status/${order.id}`} 
+                    className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <figure className="relative w-12 h-12 rounded overflow-hidden flex-shrink-0">
+                        <Image
+                          src={order.shop?.image || "/images/bar.jpg"}
+                          alt={order.shop?.name || "Shop"}
+                          fill
+                          className="object-cover"
+                        />
+                      </figure>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-lg truncate">
+                          LIQ-{order.id.slice(-6)} - {order.shop?.name || 'Unknown'}
+                        </h3>
+                        <p className="text-sm text-gray-600 truncate">
+                          {getFormattedDateTime(order.created_at)} -{' '}
+                          <span className="text-primary font-medium">
+                            {getOrderStatus(order.square_status)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight size={22} color="gray" />
+                  </Link>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
     </>
   );
 }
