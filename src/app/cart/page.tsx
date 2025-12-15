@@ -797,7 +797,7 @@ export default function Cart() {
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           {/* Previous Orders */}
-          <div className="flex flex-col gap-4 p-4">
+          {/* <div className="flex flex-col gap-4 p-4">
             {loadingOrders ? (
               <p className="text-gray-500">Loading previous orders...</p>
             ) : oldOrders.length === 0 ? (
@@ -824,7 +824,7 @@ export default function Cart() {
                 </Link>
               ))
             )}
-          </div>
+          </div> */}
 
           {/* Cart Items */}
           {loading ? (
