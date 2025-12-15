@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import styles from "../order-status.module.scss";
 import Image from "next/image";
-import statusImg from "../../../../public/images/status.png";
-import { EllipsisVertical, ClockFading } from "lucide-react";
 import Link from "next/link";
+import { EllipsisVertical, ClockFading } from "lucide-react";
+import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import styles from "../order-status.module.scss";
+import statusImg from "../../../../public/images/status.png";
 
 // ------------------------------------------
 // TYPES
@@ -22,49 +23,78 @@ interface OrderProduct {
 }
 
 interface OrderData {
-  status: string;
-  is_ready: string;
-  square_order_id?: string;
+  status: string;        // "1" | "2"
+  is_ready: string;      // "0" | "1"
+  sqaure_order_id?: string;
   products?: OrderProduct[];
 }
 
-export default function OrderStatusPageClient({ id }: { id: string }) {
+type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | null;
+
+// ------------------------------------------
+// STATUS MESSAGE (SQUARE)
+// ------------------------------------------
+const getStatusMessage = (status: SquareStatus) => {
+  switch (status) {
+    case "PROPOSED":
+      return "The Bar Has Received Your Order";
+    case "RESERVED":
+      return "The Bar Is Preparing Your Order";
+    case "PREPARED":
+      return "Your Order Is Ready For Pickup";
+    default:
+      return "Your order is being processed";
+  }
+};
+
+interface Props {
+  id: string;
+}
+
+export default function OrderStatusPageClient({ id }: Props) {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<OrderData | null>(null);
-  const [squareStatus, setSquareStatus] = useState<string | null>(null);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [squareStatus, setSquareStatus] = useState<SquareStatus>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // ------------------------------------------
-  // STATUS MESSAGES - SQUARE ONLY
-  // ------------------------------------------
-  const getStatusMessage = useCallback((status: string | null) => {
-    switch (status) {
-      case "PROPOSED":
-        return "The Bar Has Received Your Order";
-      case "RESERVED":
-        return "The Bar Is Preparing Your Order";
-      case "PREPARED":
-        return "Your Order Is Ready For Pickup";
-      default:
-        return "Your order is being processed";
+  // single interval ref so it can be cleared safely
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
 
+  const backClick = useCallback(() => {
+    clearPolling();
+    router.back();
+  }, [clearPolling, router]);
+
   // ------------------------------------------
-  // FETCH ORDER DETAILS
+  // API HELPERS
   // ------------------------------------------
-  const fetchOrderDetails = useCallback(async () => {
+  const fetchOrderDetails = useCallback(async (): Promise<OrderData | null> => {
     try {
       const res = await fetch(
         `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
         { cache: "no-store" }
       );
-
       const data = await res.json();
 
+      console.log("orderDetails API =>", data);
+
       if (data.status === "1" && data.order) {
-        return data.order;
+        const safeOrder: OrderData = {
+          ...data.order,
+          products: Array.isArray(data.order.products)
+            ? data.order.products
+            : [],
+        };
+        return safeOrder;
       }
       return null;
     } catch (err) {
@@ -73,128 +103,113 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
     }
   }, [id]);
 
-  // ------------------------------------------
-  // FETCH SQUARE ORDER STATUS
-  // ------------------------------------------
-  const fetchSquareStatus = useCallback(async (squareOrderId: string) => {
-    try {
-      const res = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`,
-        { cache: "no-store" }
-      );
-      const data = await res.json();
-      
-      // Handle the new response format: {"status":"1","message":"...","square_order_status":"PREPARED"}
-      if (data.status === "1" && data.square_order_status) {
-        return data.square_order_status;
-      }
-      return null;
-    } catch (err) {
-      console.error("Square status fetch error", err);
-      return null;
-    }
-  }, []);
+  const fetchSquareOrderStatus = useCallback(
+    async (squareOrderId: string): Promise<SquareStatus> => {
+      try {
+        const res = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
 
-  // ------------------------------------------
-  // POLLING LOGIC
-  // ------------------------------------------
-  useEffect(() => {
-    const pollOrderStatus = async () => {
-      const orderData = await fetchOrderDetails();
-      
-      if (!orderData) {
-        setOrder(null);
-        return;
-      }
+        console.log("Square status API =>", data);
 
-      setOrder(orderData);
-
-      // If we have square_order_id, fetch Square status
-      if (orderData.square_order_id) {
-        const newSquareStatus = await fetchSquareStatus(orderData.square_order_id);
-        if (newSquareStatus) {
-          setSquareStatus(newSquareStatus);
-          
-          // Update progress bar mapping
-          if (newSquareStatus === "RESERVED") {
-            orderData.status = "2";
-            orderData.is_ready = "0";
-          } else if (newSquareStatus === "PREPARED") {
-            orderData.status = "2";
-            orderData.is_ready = "1";
+        if (data.status === "1" && typeof data.square_order_status === "string") {
+          const raw = data.square_order_status as string;
+          if (raw === "PROPOSED" || raw === "RESERVED" || raw === "PREPARED") {
+            return raw;
           }
-          
-          setOrder({ ...orderData });
         }
+        return null;
+      } catch (err) {
+        console.error("Square status fetch error", err);
+        return null;
       }
-
-      // Stop polling when PREPARED (final state)
-      if (squareStatus === "PREPARED") {
-        stopPolling();
-      }
-    };
-
-    const startPolling = async () => {
-      setLoading(true);
-      await pollOrderStatus();
-      setLoading(false);
-      
-      // Start interval polling every 5 seconds (unless already PREPARED)
-      if (squareStatus !== "PREPARED") {
-        const interval = setInterval(pollOrderStatus, 5000);
-        setPollInterval(interval);
-      }
-    };
-
-    const stopPolling = () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        setPollInterval(null);
-      }
-    };
-
-    startPolling();
-
-    // Cleanup
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [id, fetchOrderDetails, fetchSquareStatus, squareStatus]);
-
-  const backClick = () => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-    }
-    router.back();
-  };
+    },
+    []
+  );
 
   // ------------------------------------------
-  // LOADING
+  // POLLING
+  // ------------------------------------------
+  const pollOnce = useCallback(async () => {
+    const orderData = await fetchOrderDetails();
+
+    if (!orderData) {
+      setOrder(null);
+      setError("Order not found or deleted");
+      return;
+    }
+
+    setError(null);
+    setOrder(orderData);
+
+    if (!orderData.sqaure_order_id) {
+      // no Square order, keep generic text
+      setSquareStatus(null);
+      return;
+    }
+
+    const sq = await fetchSquareOrderStatus(orderData.sqaure_order_id);
+    setSquareStatus(sq);
+
+    // reflect into order flags if you still want to use them elsewhere
+    if (sq === "RESERVED") {
+      setOrder({ ...orderData, status: "2", is_ready: "0" });
+    } else if (sq === "PREPARED") {
+      setOrder({ ...orderData, status: "2", is_ready: "1" });
+      clearPolling(); // final state, stop polling
+    }
+  }, [fetchOrderDetails, fetchSquareOrderStatus, clearPolling]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const start = async () => {
+      setLoading(true);
+      await pollOnce();
+      if (!mounted) return;
+      setLoading(false);
+
+      // if not yet prepared, begin interval
+      if (!intervalRef.current) {
+        intervalRef.current = setInterval(pollOnce, 5000);
+      }
+    };
+
+    start();
+
+    return () => {
+      mounted = false;
+      clearPolling();
+    };
+  }, [pollOnce, clearPolling]);
+
+  // ------------------------------------------
+  // RENDER
   // ------------------------------------------
   if (loading) {
-    return <p className="text-center mt-10">Loading order…</p>;
+    return (
+      <section className="pageWrapper hasHeader">
+        <div className="pageContainer">
+          <p className="text-center mt-10">Loading order…</p>
+        </div>
+      </section>
+    );
   }
 
-  // ------------------------------------------
-  // NOT FOUND
-  // ------------------------------------------
-  if (!order) {
+  if (error || !order) {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <h2 className="text-center mt-10 text-red-500">
-            Order not found or deleted
+            {error || "Order not found or deleted"}
           </h2>
         </div>
       </section>
     );
   }
 
-  // ------------------------------------------
-  // MAIN UI
-  // ------------------------------------------
   return (
     <>
       {/* HEADER */}
@@ -220,43 +235,55 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
-            {/* STATUS TITLE - SQUARE STATUS ONLY */}
+            {/* STATUS TITLE */}
             <h4 className="text-center mb-2">
               {getStatusMessage(squareStatus)}
             </h4>
 
             <h5 className="text-center">Please wait near the bar</h5>
 
-            {/* PROGRESS BAR */}
+            {/* PROGRESS BAR: driven only by squareStatus */}
             <div className={styles.progress}>
-              <div className={`${styles.progressLayer} ${styles.animated}`}>
-                <div className={styles.progressBar}></div>
-              </div>
+  {/* 1. PROPOSED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "PROPOSED"
+        ? styles.animated
+        : squareStatus === "RESERVED" || squareStatus === "PREPARED"
+        ? styles.completed
+        : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
 
-              <div
-                className={`${styles.progressLayer} ${
-                  order.status === "2" && order.is_ready === "0"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
+  {/* 2. RESERVED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "RESERVED"
+        ? styles.animated
+        : squareStatus === "PREPARED"
+        ? styles.completed
+        : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
 
-              <div
-                className={`${styles.progressLayer} ${
-                  order.status === "2" && order.is_ready === "1"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
-            </div>
+  {/* 3. PREPARED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "PREPARED" ? styles.animated : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
+</div>
+
 
             {/* STATUS IMAGE */}
             <div className={styles.successIcon}>
-              <Image src={statusImg} alt="" fill />
+              <Image src={statusImg} alt="Order status" fill />
             </div>
 
             {/* ORDER DETAILS */}
@@ -271,10 +298,12 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
               {order.products?.map((p) => (
                 <div key={p.id} className="py-4 border-b border-gray-200">
                   <h5>
-                    {p.quantity} X {p.product_name} <span>({p.unit})</span>
+                    {p.quantity} × {p.product_name}{" "}
+                    <span>({p.unit})</span>
                   </h5>
                   <p>
-                    Mixer Name: <span>{p.choice_of_mixer_name || "N/A"}</span>
+                    Mixer Name:{" "}
+                    <span>{p.choice_of_mixer_name || "N/A"}</span>
                     <br />
                     Additional Shots: <span>{p.shot_count || 0}</span>
                     <br />
@@ -287,6 +316,8 @@ export default function OrderStatusPageClient({ id }: { id: string }) {
           </div>
         </div>
       </section>
+
+      <BottomNavigation />
     </>
   );
 }

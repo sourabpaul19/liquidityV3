@@ -270,32 +270,44 @@ export default function OrderSuccess() {
             </h4>
 
             <h5 className="text-center">Please wait near the bar</h5>
+<div className={styles.progress}>
+  {/* 1. PROPOSED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "PROPOSED"
+        ? styles.animated
+        : squareStatus === "RESERVED" || squareStatus === "PREPARED"
+        ? styles.completed
+        : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
 
-            <div className={styles.progress}>
-              <div className={`${styles.progressLayer} ${styles.animated}`}>
-                <div className={styles.progressBar}></div>
-              </div>
+  {/* 2. RESERVED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "RESERVED"
+        ? styles.animated
+        : squareStatus === "PREPARED"
+        ? styles.completed
+        : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
 
-              <div
-                className={`${styles.progressLayer} ${
-                  order.status === "2" && order.is_ready === "0"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
+  {/* 3. PREPARED */}
+  <div
+    className={`${styles.progressLayer} ${
+      squareStatus === "PREPARED" ? styles.animated : ""
+    }`}
+  >
+    <div className={styles.progressBar}></div>
+  </div>
+</div>
 
-              <div
-                className={`${styles.progressLayer} ${
-                  order.status === "2" && order.is_ready === "1"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
-            </div>
+
 
             <div className={styles.successIcon}>
               <Image src={statusImg} alt="Order status" fill />
