@@ -178,7 +178,7 @@ export default function HomePage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 px-4">
-            <Link href="/cart" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
+            <Link href="/my-orders" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
               Ongoing and Past Orders
             </Link>
           </div>

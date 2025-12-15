@@ -668,7 +668,7 @@ export default function Outlet() {
               <div className="space-y-4">
                 {cat.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between w-full">
-                    <div className={styles.itemCard}>
+                    <div className={styles.itemCard}  onClick={() => setSelectedItem(item)}>
                       <figure className="relative h-28 w-28">
                         <Image src={item.image} alt={item.name} fill className="object-cover rounded-lg" />
                       </figure>
@@ -677,7 +677,7 @@ export default function Outlet() {
                         <p>{item.description}</p>
                         <div className="flex items-center justify-between">
                           <p className={styles.price}>${item.price.toFixed(2)}</p>
-                          <button className={styles.addButton} onClick={() => setSelectedItem(item)}>
+                          <button className={styles.addButton}>
                             <Plus size={16} />
                           </button>
                         </div>
@@ -728,7 +728,8 @@ export default function Outlet() {
               {selectedMixer ? (
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-700">
-                    {selectedMixer.name} - ${selectedMixer.price}
+                    {/* {selectedMixer.name} - ${selectedMixer.price} */}
+                    {selectedMixer.name}
                   </span>
                   <button
                     className="flex items-center justify-center p-2 rounded-full bg-red-100"
@@ -785,7 +786,8 @@ export default function Outlet() {
               }`}
             >
               <span className="text-sm mr-auto text-center">
-                {mixer.name} - ${mixer.price_display ?? mixer.price}
+                {/* {mixer.name} - ${mixer.price_display ?? mixer.price} */}
+                {mixer.name}
               </span>
               <input
                 type="radio"

@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ChevronRight, Loader2, Wallet } from "lucide-react";
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import {
   Elements,
   CardElement,
   useStripe,
   useElements,
+  PaymentRequestButtonElement,
 } from "@stripe/react-stripe-js";
 
 import styles from "./cart.module.scss";
@@ -49,7 +50,9 @@ interface SavedCard {
   exp_year: number;
 }
 
-type PayMode = "wallet" | "new_card" | "saved_card";
+type PayMode = "wallet" | "new_card" | "saved_card" | "apple_pay";
+
+/* ---------- Saved cards ---------- */
 
 function SavedCardSelector({
   cards,
@@ -95,6 +98,8 @@ function SavedCardSelector({
     </div>
   );
 }
+
+/* ---------- New card form ---------- */
 
 function NewCardPaymentForm({
   clientSecret,
@@ -185,6 +190,92 @@ function NewCardPaymentForm({
   );
 }
 
+/* ---------- Apple Pay / Payment Request ---------- */
+
+function ApplePayButtonWrapper({
+  clientSecret,
+  amountCents,
+  onSuccess,
+}: {
+  clientSecret: string | null;
+  amountCents: number;
+  onSuccess: (paymentIntentId: string) => Promise<void>;
+}) {
+  const stripe = useStripe();
+  const [paymentRequest, setPaymentRequest] = useState<any>(null);
+
+  useEffect(() => {
+    if (!stripe || !clientSecret) return;
+
+    const pr = stripe.paymentRequest({
+      country: "CA",
+      currency: "cad",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: amountCents,
+      },
+      requestPayerName: true,
+      requestPayerEmail: true,
+    });
+
+    pr.canMakePayment().then((result) => {
+      if (result) setPaymentRequest(pr);
+    });
+
+    pr.on("paymentmethod", async (ev) => {
+      if (!stripe || !clientSecret) return;
+
+      const { paymentIntent, error: confirmError } =
+        await stripe.confirmCardPayment(
+          clientSecret,
+          { payment_method: ev.paymentMethod.id },
+          { handleActions: false }
+        ); // recommended pattern for Payment Request Button[web:6][web:50]
+
+      if (confirmError || !paymentIntent) {
+        ev.complete("fail");
+        alert(confirmError?.message || "Apple Pay failed");
+        return;
+      }
+
+      ev.complete("success");
+
+      if (paymentIntent.status === "requires_action") {
+        const { error } = await stripe.confirmCardPayment(clientSecret);
+        if (error) {
+          alert(error.message || "Apple Pay failed");
+          return;
+        }
+      }
+
+      if (paymentIntent.status === "succeeded") {
+        await onSuccess(paymentIntent.id);
+      }
+    });
+  }, [stripe, clientSecret, amountCents, onSuccess]);
+
+  if (!paymentRequest) return null;
+
+  return (
+    <div className="mt-4">
+      <PaymentRequestButtonElement
+        options={{
+          paymentRequest,
+          style: {
+            paymentRequestButton: {
+              type: "default",
+              theme: "dark",
+              height: "48px",
+            },
+          },
+        }}
+      />
+    </div>
+  );
+}
+
+/* ---------- Main Cart ---------- */
+
 export default function Cart() {
   const router = useRouter();
 
@@ -204,29 +295,30 @@ export default function Cart() {
 
   const [deviceId, setDeviceId] = useState("web");
 
-  // Payment states
   const [payMode, setPayMode] = useState<PayMode>("wallet");
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-  const [selectedSavedCard, setSelectedSavedCard] = useState<SavedCard | null>(null);
-  
-  // Wallet state - Liquidity Cash = Wallet Balance
+  const [selectedSavedCard, setSelectedSavedCard] =
+    useState<SavedCard | null>(null);
+
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletLoading, setWalletLoading] = useState(true);
 
-  // Stripe states
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initializingPayment, setInitializingPayment] = useState(false);
 
-  // Load basic info
+  /* ----- Load local storage basics ----- */
+
   useEffect(() => {
-    const storedUser = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
+    if (typeof window === "undefined") return;
+    const storedUser = localStorage.getItem("user_id");
     if (storedUser) setUserId(storedUser);
 
-    const storedDevice = typeof window !== "undefined" ? localStorage.getItem("device_id") : null;
+    const storedDevice = localStorage.getItem("device_id");
     if (storedDevice) setDeviceId(storedDevice);
   }, []);
 
-  // Fetch Cart
+  /* ----- Fetch cart ----- */
+
   const fetchCart = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -240,7 +332,7 @@ export default function Cart() {
 
       const data = await res.json();
 
-      if ((data.status === "1" || data.status === 1)) {
+      if (data.status === "1" || data.status === 1) {
         setCartItems(data.cartItems || []);
         setCartTotal(Number(data.total_price || 0));
       } else {
@@ -254,7 +346,8 @@ export default function Cart() {
     }
   }, [userId, deviceId]);
 
-  // Fetch Old Orders
+  /* ----- Fetch old orders ----- */
+
   const fetchOldOrders = useCallback(async () => {
     if (!userId) return;
     setLoadingOrders(true);
@@ -284,7 +377,8 @@ export default function Cart() {
     }
   }, [userId]);
 
-  // Fetch Wallet Balance (Liquidity Cash)
+  /* ----- Fetch wallet ----- */
+
   const fetchWalletBalance = useCallback(async () => {
     if (!userId) return;
     setWalletLoading(true);
@@ -293,15 +387,12 @@ export default function Cart() {
       const res = await fetch(
         `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
       );
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-      
+
       if (data.status === "1") {
-        console.log("Wallet/Liquidity Cash data:", data);
         setWalletBalance(Number(data.wallet_balance) || 0);
       } else {
         setWalletBalance(0);
@@ -314,7 +405,8 @@ export default function Cart() {
     }
   }, [userId]);
 
-  // Fetch Saved Cards
+  /* ----- Fetch saved cards ----- */
+
   const fetchSavedCards = useCallback(async () => {
     if (!userId) return;
 
@@ -325,17 +417,13 @@ export default function Cart() {
         body: JSON.stringify({ user_id: userId }),
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-      
+
       if ((data.status === "1" || data.status === 1) && Array.isArray(data.cards)) {
-        console.log("Saved cards loaded:", data.cards);
         setSavedCards(data.cards);
       } else {
-        console.log("No cards:", data);
         setSavedCards([]);
       }
     } catch (err) {
@@ -344,7 +432,8 @@ export default function Cart() {
     }
   }, [userId]);
 
-  // Load all data
+  /* ----- Load all data ----- */
+
   useEffect(() => {
     if (!userId) return;
     fetchCart();
@@ -353,15 +442,17 @@ export default function Cart() {
     fetchSavedCards();
   }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance, fetchSavedCards]);
 
+  /* ----- Totals ----- */
+
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
-  //const baseTotal = cartTotal + 1 + 3.57 + tipValue; // Subtotal + Service + Taxes + Tips
   const taxes = cartTotal * 0.13;
-  const baseTotal = cartTotal + taxes + tipValue; // Subtotal + Service + Taxes + Tips
+  const baseTotal = cartTotal + taxes + tipValue;
   const walletAmountToUse = Math.min(walletBalance, baseTotal);
   const remainingAmount = Math.max(0, baseTotal - walletBalance);
   const finalTotalAmount = baseTotal.toFixed(2);
 
-  // Cart operations
+  /* ----- Cart operations ----- */
+
   const removeItem = async (itemId: string) => {
     if (!userId || !itemId) return;
     setLoading(true);
@@ -378,7 +469,7 @@ export default function Cart() {
       });
 
       const data = await res.json();
-      if ((data.status === "1" || data.status === 1)) {
+      if (data.status === "1" || data.status === 1) {
         await fetchCart();
       } else {
         alert(data.message || "Could not remove item");
@@ -408,7 +499,7 @@ export default function Cart() {
       });
 
       const data = await res.json();
-      if ((data.status === "1" || data.status === 1)) {
+      if (data.status === "1" || data.status === 1) {
         await fetchCart();
       } else {
         alert(data.message || "Could not update quantity.");
@@ -425,12 +516,20 @@ export default function Cart() {
     return "1";
   };
 
-  const createLiquidityOrder = async (transactionId: string, walletUsed: number = 0, paymentType: "1" | "2" = "1") => {
+  /* ----- Create Liquidity order ----- */
+
+  const createLiquidityOrder = async (
+    transactionId: string,
+    walletUsed: number = 0,
+    paymentType: "1" | "2" = "1"
+  ) => {
     const user_name = localStorage.getItem("user_name") || "";
     const user_email = localStorage.getItem("user_email") || "";
     const user_mobile = localStorage.getItem("user_mobile") || "";
 
-    const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
+    const selected_shop = JSON.parse(
+      localStorage.getItem("selected_shop") || "{}"
+    );
     const shop_id = selected_shop?.id || "";
 
     if (!userId || !user_name || !user_email || !user_mobile) {
@@ -455,7 +554,7 @@ export default function Cart() {
     formData.append("email", user_email);
     formData.append("mobile", user_mobile);
     formData.append("user_id", userId);
-    formData.append("payment_type", paymentType); // 1=card, 2=wallet
+    formData.append("payment_type", paymentType);
     formData.append("transaction_id", transactionId);
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", "");
@@ -476,16 +575,17 @@ export default function Cart() {
 
       if (data.status === 1 || data.status === "1") {
         router.push(`/order-success/${data.order_id}`);
-        await fetchWalletBalance(); // Refresh wallet after successful order
+        await fetchWalletBalance();
       } else {
         alert(data.message || "Order failed");
       }
-    } catch (err) {
+    } catch {
       alert("Something went wrong while creating order.");
     }
   };
 
-  // Pure Wallet Payment (payment_type=2) - Uses Liquidity Cash
+  /* ----- Wallet-only payment ----- */
+
   const payWithWallet = async () => {
     if (!userId || !activePickup) {
       alert("Missing required information.");
@@ -493,12 +593,18 @@ export default function Cart() {
     }
 
     if (walletBalance < baseTotal) {
-      alert(`Insufficient Liquidity Cash. Need $${baseTotal.toFixed(2)}, have $${walletBalance.toFixed(2)}`);
+      alert(
+        `Insufficient Liquidity Cash. Need $${baseTotal.toFixed(
+          2
+        )}, have $${walletBalance.toFixed(2)}`
+      );
       return;
     }
 
     try {
-      const transactionId = `LIQUIDITY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const transactionId = `LIQUIDITY_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
       await createLiquidityOrder(transactionId, baseTotal, "2");
     } catch (err) {
       console.error(err);
@@ -506,15 +612,15 @@ export default function Cart() {
     }
   };
 
-  // Initialize Stripe Payment (Hybrid: Wallet + Card)
-  const initNewCardPayment = async () => {
+  /* ----- Start PaymentIntent for card / Apple Pay ----- */
+
+  const initStripePaymentIntent = async () => {
     if (!userId || !activePickup) {
       alert("Missing required information.");
       return false;
     }
 
     if (remainingAmount <= 0) {
-      // Full payment covered by Liquidity Cash
       await payWithWallet();
       return true;
     }
@@ -552,7 +658,8 @@ export default function Cart() {
     }
   };
 
-  // Pay with Saved Card (Hybrid: Wallet + Card)
+  /* ----- Saved card payment (server side confirm) ----- */
+
   const payWithSavedCard = async () => {
     if (!selectedSavedCard || !userId || !activePickup) {
       alert("Please select a saved card and pickup location.");
@@ -588,7 +695,11 @@ export default function Cart() {
       const data = await res.json();
 
       if (data.status === "success" && data.payment_intent_id) {
-        await createLiquidityOrder(data.payment_intent_id, walletAmountToUse, "1");
+        await createLiquidityOrder(
+          data.payment_intent_id,
+          walletAmountToUse,
+          "1"
+        );
       } else {
         alert(data.message || "Payment failed.");
       }
@@ -598,12 +709,16 @@ export default function Cart() {
     }
   };
 
+  /* ----- Acknowledgement popup ----- */
+
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
         <h2 className="text-xl font-bold mb-4">Acknowledgement</h2>
         <p className="text-gray-700 mb-5">
-          I understand that it is my responsibility to pick up my drink when it is ready, and that failure to do so in a timely manner means my drink could get stolen or disposed of by the bar.
+          I understand that it is my responsibility to pick up my drink when it
+          is ready, and that failure to do so in a timely manner means my drink
+          could get stolen or disposed of by the bar.
         </p>
 
         <div className="flex flex-col gap-3">
@@ -616,7 +731,7 @@ export default function Cart() {
               } else if (payMode === "saved_card") {
                 await payWithSavedCard();
               } else {
-                await initNewCardPayment();
+                await initStripePaymentIntent();
               }
             }}
           >
@@ -633,7 +748,7 @@ export default function Cart() {
               } else if (payMode === "saved_card") {
                 await payWithSavedCard();
               } else {
-                await initNewCardPayment();
+                await initStripePaymentIntent();
               }
             }}
           >
@@ -651,6 +766,8 @@ export default function Cart() {
     </div>
   );
 
+  /* ----- Checkout handler ----- */
+
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -665,7 +782,7 @@ export default function Cart() {
     } else if (payMode === "saved_card") {
       await payWithSavedCard();
     } else {
-      await initNewCardPayment();
+      await initStripePaymentIntent();
     }
   };
 
@@ -693,7 +810,9 @@ export default function Cart() {
                   className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
                 >
                   <div>
-                    <h3 className="font-semibold text-lg">{order.unique_id}</h3>
+                    <h3 className="font-semibold text-lg">
+                      {order.unique_id}
+                    </h3>
                     <p className="text-sm text-gray-600">
                       {order.order_date} -
                       <span className="text-primary font-medium ml-1">
@@ -723,7 +842,8 @@ export default function Cart() {
 
                     {item.choice_of_mixer_name && (
                       <p>
-                        <strong>Choice of mixer:</strong> {item.choice_of_mixer_name}
+                        <strong>Choice of mixer:</strong>{" "}
+                        {item.choice_of_mixer_name}
                       </p>
                     )}
 
@@ -735,14 +855,17 @@ export default function Cart() {
 
                     {item.special_instruction && (
                       <p>
-                        <strong>Special Instruction:</strong> {item.special_instruction}
+                        <strong>Special Instruction:</strong>{" "}
+                        {item.special_instruction}
                       </p>
                     )}
                   </div>
 
                   <div className={styles.itemRight}>
                     <h4>
-                      {(Number(item.price) * Number(item.quantity)).toFixed(2)}
+                      {(
+                        Number(item.price) * Number(item.quantity)
+                      ).toFixed(2)}
                     </h4>
                     <QuantityButton
                       min={0}
@@ -804,25 +927,18 @@ export default function Cart() {
                 <p>${cartTotal.toFixed(2)}</p>
               </div>
 
-              {/* ✅ Liquidity Cash = Wallet Balance - Now properly labeled */}
               {walletLoading ? (
                 <div className={styles.billingItem}>
                   <p>Liquidity Cash</p>
                   <p>Loading...</p>
                 </div>
               ) : walletBalance > 0 ? (
-                <>
-                  <div className={styles.billingItem}>
-                    <p>Liquidity Cash</p>
-                    <p className="text-green-600 font-semibold">
-                      -${walletAmountToUse.toFixed(2)}
-                    </p>
-                  </div>
-                  {/* <div className={styles.billingItem}>
-                    <p>Wallet Balance</p>
-                    <p className="text-gray-600">${walletBalance.toFixed(2)} available</p>
-                  </div> */}
-                </>
+                <div className={styles.billingItem}>
+                  <p>Liquidity Cash</p>
+                  <p className="text-green-600 font-semibold">
+                    -${walletAmountToUse.toFixed(2)}
+                  </p>
+                </div>
               ) : (
                 <div className={styles.billingItem}>
                   <p>Liquidity Cash</p>
@@ -830,14 +946,9 @@ export default function Cart() {
                 </div>
               )}
 
-              {/* <div className={styles.billingItem}>
-                <p>Service Fee</p>
-                <p>$1.00</p>
-              </div> */}
-
               <div className={styles.billingItem}>
-                <p>Taxes & Other Fees</p>
-                <p>${taxes}</p>
+                <p>Taxes &amp; Other Fees</p>
+                <p>${taxes.toFixed(2)}</p>
               </div>
 
               <div className={styles.billingItem}>
@@ -865,10 +976,11 @@ export default function Cart() {
                   }`}
                 >
                   <Wallet className="w-5 h-5" />
-                  {walletBalance >= baseTotal 
+                  {walletBalance >= baseTotal
                     ? `Liquidity Cash (Full Coverage $${finalTotalAmount})`
-                    : `Liquidity Cash ($${walletBalance.toFixed(2)} available)`
-                  }
+                    : `Liquidity Cash ($${walletBalance.toFixed(
+                        2
+                      )} available)`}
                 </button>
 
                 <button
@@ -880,23 +992,24 @@ export default function Cart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
                   }`}
                 >
-                  {remainingAmount > 0 ? `Card ($${remainingAmount.toFixed(2)} + Cash)` : "Card"}
+                  {remainingAmount > 0
+                    ? `Card ($${remainingAmount.toFixed(2)} + Cash)`
+                    : "Card"}
                 </button>
 
-                {/* <button
+                <button
                   type="button"
-                  onClick={() => setPayMode("saved_card")}
-                  className={`py-3 px-4 rounded-lg font-medium border ${
-                    payMode === "saved_card"
-                      ? "bg-primary text-white border-primary shadow-lg"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
+                  onClick={() => setPayMode("apple_pay")}
+                  className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
+                    payMode === "apple_pay"
+                      ? "bg-black text-white border-black shadow-lg"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
                   }`}
                 >
-                  Saved Card
-                </button> */}
+                   Apple Pay
+                </button>
               </div>
 
-              {/* Saved Cards */}
               {payMode === "saved_card" && (
                 <SavedCardSelector
                   cards={savedCards}
@@ -905,18 +1018,36 @@ export default function Cart() {
                 />
               )}
 
-              {/* New Card Form */}
               {payMode === "new_card" && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
                   amountLabel={`$${remainingAmount.toFixed(2)}`}
-                  onSuccess={(paymentIntentId) => createLiquidityOrder(paymentIntentId, walletAmountToUse, "1")}
+                  onSuccess={(paymentIntentId) =>
+                    createLiquidityOrder(
+                      paymentIntentId,
+                      walletAmountToUse,
+                      "1"
+                    )
+                  }
+                />
+              )}
+
+              {payMode === "apple_pay" && clientSecret && (
+                <ApplePayButtonWrapper
+                  clientSecret={clientSecret}
+                  amountCents={Math.round(remainingAmount * 100)}
+                  onSuccess={(paymentIntentId) =>
+                    createLiquidityOrder(
+                      paymentIntentId,
+                      walletAmountToUse,
+                      "1"
+                    )
+                  }
                 />
               )}
             </div>
           </Elements>
 
-          {/* Tips Selector */}
           <TipsSelector
             value={tipPercent}
             onChange={(val: number, isAmount: boolean) => {
@@ -929,15 +1060,22 @@ export default function Cart() {
             }}
           />
 
-          {/* Checkout Buttons */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
               {payMode === "wallet" && (
                 <button
                   type="submit"
-                  disabled={!activePickup || cartItems.length === 0 || walletLoading || walletBalance < baseTotal}
+                  disabled={
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
+                  }
                   className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    !activePickup || cartItems.length === 0 || walletLoading || walletBalance < baseTotal
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
                       ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                       : "bg-green-600 text-white hover:bg-green-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                   }`}
@@ -953,42 +1091,63 @@ export default function Cart() {
                 </button>
               )}
 
-              {payMode === "new_card" && !clientSecret && (
-                <button
-                  type="submit"
-                  disabled={initializingPayment || !activePickup || cartItems.length === 0}
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    initializingPayment || !activePickup || cartItems.length === 0
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
-                  }`}
-                >
-                  {initializingPayment ? (
-                    <>
-                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
-                      Starting payment...
-                    </>
-                  ) : remainingAmount > 0 
-                    ? `Pay $${remainingAmount.toFixed(2)} (Cash + Card)`
-                    : `Pay Full $${finalTotalAmount} with Liquidity Cash`
-                  }
-                </button>
-              )}
+              {(payMode === "new_card" || payMode === "apple_pay") &&
+                !clientSecret && (
+                  <button
+                    type="submit"
+                    disabled={
+                      initializingPayment ||
+                      !activePickup ||
+                      cartItems.length === 0
+                    }
+                    className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
+                      initializingPayment ||
+                      !activePickup ||
+                      cartItems.length === 0
+                        ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                        : payMode === "apple_pay"
+                        ? "bg-black text-white hover:bg-gray-900 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                        : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {initializingPayment ? (
+                      <>
+                        <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
+                        {payMode === "apple_pay"
+                          ? "Starting Apple Pay..."
+                          : "Starting payment..."}
+                      </>
+                    ) : payMode === "apple_pay" ? (
+                      <> Pay ${remainingAmount.toFixed(2)} with Apple Pay</>
+                    ) : remainingAmount > 0 ? (
+                      `Pay $${remainingAmount.toFixed(2)} (Cash + Card)`
+                    ) : (
+                      `Pay Full $${finalTotalAmount} with Liquidity Cash`
+                    )}
+                  </button>
+                )}
 
               {payMode === "saved_card" && (
                 <button
                   type="submit"
-                  disabled={!selectedSavedCard || !activePickup || cartItems.length === 0}
+                  disabled={
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
+                  }
                   className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    !selectedSavedCard || !activePickup || cartItems.length === 0
+                    !selectedSavedCard ||
+                    !activePickup ||
+                    cartItems.length === 0
                       ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                       : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                   }`}
                 >
-                  {remainingAmount > 0 
-                    ? `Pay $${remainingAmount.toFixed(2)} with Saved Card (Cash applied)`
-                    : `Pay Full $${finalTotalAmount} with Liquidity Cash`
-                  }
+                  {remainingAmount > 0
+                    ? `Pay $${remainingAmount.toFixed(
+                        2
+                      )} with Saved Card (Cash applied)`
+                    : `Pay Full $${finalTotalAmount} with Liquidity Cash`}
                 </button>
               )}
             </form>

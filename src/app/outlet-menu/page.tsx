@@ -503,7 +503,7 @@ export default function OutletMenu() {
               <div className="space-y-4">
                 {cat.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between w-full">
-                    <div className={styles.itemCard}>
+                    <div className={styles.itemCard} onClick={() => setSelectedItem(item)}>
                       <figure className="relative h-28 w-28">
                         <Image src={item.image} alt={item.name} fill className="object-cover rounded-lg" />
                       </figure>
@@ -561,7 +561,8 @@ export default function OutletMenu() {
               <p>Add Mixer (Non-Alcoholic)</p>
               {selectedMixer ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-700">{selectedMixer.name} - ${selectedMixer.price}</span>
+                  {/* <span className="text-sm text-gray-700">{selectedMixer.name} - ${selectedMixer.price}</span> */}
+                  <span className="text-sm text-gray-700">{selectedMixer.name}</span>
                   <button className="flex items-center justify-center p-2 rounded-full bg-red-100" onClick={() => setSelectedMixer(null)}>
                     <Trash2 size={16} className="text-red-500" />
                   </button>
@@ -588,7 +589,8 @@ export default function OutletMenu() {
         <div className="grid grid-cols-1 gap-4">
           {mixers.map((mixer) => (
             <label key={mixer.id} className={`cursor-pointer border rounded-lg p-3 flex items-center justify-between transition ${tempSelectedMixer?.id === mixer.id ? "border-primary bg-blue-50" : "border-gray-200"}`}>
-              <span className="text-sm mr-auto text-center">{mixer.name} - ${mixer.price_display ?? mixer.price}</span>
+              {/* <span className="text-sm mr-auto text-center">{mixer.name} - ${mixer.price_display ?? mixer.price}</span> */}
+              <span className="text-sm mr-auto text-center">{mixer.name}</span>
               <input type="radio" name="mixer" value={String(mixer.id)} checked={tempSelectedMixer?.id === mixer.id} onChange={() => setTempSelectedMixer(mixer)} />
             </label>
           ))}

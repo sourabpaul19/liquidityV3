@@ -704,7 +704,7 @@ function CheckoutInner() {
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           {/* Previous Orders */}
-          <div className="flex flex-col gap-4 p-4">
+          {/* <div className="flex flex-col gap-4 p-4">
             {loadingOrders ? (
               <p className="text-gray-500">Loading previous orders...</p>
             ) : oldOrders.length === 0 ? (
@@ -729,7 +729,7 @@ function CheckoutInner() {
                 </Link>
               ))
             )}
-          </div>
+          </div> */}
 
           {/* Checkout Items (same as temp cart) */}
           {loading ? (
@@ -854,7 +854,7 @@ function CheckoutInner() {
 
               <div className={styles.billingItem}>
                 <p>Taxes & Other Fees</p>
-                <p>${taxes}</p>
+                <p>${taxes.toFixed(2)}</p>
               </div>
 
               <div className={styles.billingItem}>

@@ -262,7 +262,7 @@ export default function OrderSuccess() {
       </header>
 
       {/* BODY */}
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
             <h4 className="text-center mb-2">

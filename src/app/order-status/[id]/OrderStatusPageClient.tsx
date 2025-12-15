@@ -232,7 +232,7 @@ export default function OrderStatusPageClient({ id }: Props) {
       </header>
 
       {/* PAGE */}
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
             {/* STATUS TITLE */}
