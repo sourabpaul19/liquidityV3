@@ -19,7 +19,7 @@ import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
 
 const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+  process.env.STRIPE_PUBLISHABLE_KEY || ""
 );
 
 interface CartItem {
