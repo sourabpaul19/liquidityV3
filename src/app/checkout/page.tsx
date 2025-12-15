@@ -701,7 +701,7 @@ function CheckoutInner() {
         </Link>
       </header>
 
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           {/* Previous Orders */}
           <div className="flex flex-col gap-4 p-4">
