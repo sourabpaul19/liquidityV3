@@ -14,7 +14,9 @@ import {
 
 import styles from "./checkout.module.scss";
 import Header from "@/components/common/Header/Header";
-import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import Image from "next/image";
+import user from "../../../public/images/3177440.png";
+//import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
 
@@ -354,7 +356,8 @@ function CheckoutInner() {
 
   // totals
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
-  const baseTotal = cartTotal + 2.6 + tipValue;
+  const taxes = cartTotal * 0.13;
+  const baseTotal = cartTotal + taxes + tipValue;
   const walletAmountToUse = Math.min(walletBalance, baseTotal);
   const remainingAmount = Math.max(0, baseTotal - walletBalance);
   const finalTotalAmount = baseTotal.toFixed(2);
@@ -664,13 +667,41 @@ function CheckoutInner() {
 
   const canUseWallet = walletBalance > 0;
 
+  const handleButtonClick = () => {
+    router.push("/home");
+  };
+
   return (
     <>
       {showAcknowledgement && <AcknowledgementPopup />}
 
-      <Header title="Checkout" />
+      <header className="header">
+        <button
+          type="button"
+          className={styles.icon_only}
+          onClick={handleButtonClick}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#000000"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <Link href="" className={styles.user}>
+          <Image alt="User" src={user} />
+        </Link>
+      </header>
 
-      <section className="pageWrapper hasHeader hasFooter">
+      <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           {/* Previous Orders */}
           <div className="flex flex-col gap-4 p-4">
@@ -823,7 +854,7 @@ function CheckoutInner() {
 
               <div className={styles.billingItem}>
                 <p>Taxes & Other Fees</p>
-                <p>$2.60</p>
+                <p>${taxes}</p>
               </div>
 
               <div className={styles.billingItem}>
@@ -1004,8 +1035,6 @@ function CheckoutInner() {
           </div>
         </div>
       </section>
-
-      <BottomNavigation />
     </>
   );
 }

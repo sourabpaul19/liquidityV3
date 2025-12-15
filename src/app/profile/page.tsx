@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
+import React, { useEffect, useState, useCallback } from 'react';
 import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigation';
 import Header from '@/components/common/Header/Header';
 import styles from "./profile.module.scss";
@@ -45,66 +44,66 @@ export default function Profile() {
     }
   }, [isClient, router]);
 
-  useEffect(() => {
-    if (!user) return;
-    
-    const userId = user.id;
+  // Memoized wallet fetch function
+  const fetchWalletBalance = useCallback(async (userId: string) => {
+    try {
+      setLoadingWallet(true);
+      // Use proxy API route to avoid CORS
+      const response = await fetch(`/api/wallet-balance/${userId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("Wallet API Response:", data);
 
-    async function fetchWalletBalance() {
-      try {
-        setLoadingWallet(true);
-        const response = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
-        );
-        const data = await response.json();
-        console.log("Wallet API Response:", data);
+      if (data.status === "1") {
+        if (data.wallet_balance && parseFloat(data.wallet_balance) > 0) {
+          setWalletBalance(data.wallet_balance);
+          localStorage.setItem("wallet_balance", data.wallet_balance);
+        } else if (data.wallets && Array.isArray(data.wallets)) {
+          const balance = data.wallets.reduce((total: number, wallet: any) => {
+            const amount = parseFloat(wallet.amount) || 0;
+            return wallet.type === "1" ? total + amount : total - amount;
+          }, 0);
 
-        if (data.status === "1") {
-          if (data.wallet_balance && parseFloat(data.wallet_balance) > 0) {
-            setWalletBalance(data.wallet_balance);
-            localStorage.setItem("wallet_balance", data.wallet_balance);
-          } 
-          else if (data.wallets && Array.isArray(data.wallets)) {
-            const balance = data.wallets.reduce((total: number, wallet: any) => {
-              const amount = parseFloat(wallet.amount) || 0;
-              return wallet.type === "1" ? total + amount : total - amount;
-            }, 0);
-
-            const formattedBalance = Math.max(0, balance).toFixed(2);
-            setWalletBalance(formattedBalance);
-            localStorage.setItem("wallet_balance", formattedBalance);
-            console.log("Calculated balance from transactions:", formattedBalance);
-          } else {
-            fallbackToLocalStorage();
-          }
+          const formattedBalance = Math.max(0, balance).toFixed(2);
+          setWalletBalance(formattedBalance);
+          localStorage.setItem("wallet_balance", formattedBalance);
+          console.log("Calculated balance from transactions:", formattedBalance);
         } else {
-          console.warn("Wallet fetch failed:", data.message);
           fallbackToLocalStorage();
         }
-      } catch (error) {
-        console.error("Error fetching wallet balance:", error);
-        fallbackToLocalStorage();
-      } finally {
-        setLoadingWallet(false);
-      }
-    }
-
-    function fallbackToLocalStorage() {
-      const savedWallet = localStorage.getItem("wallet_balance");
-      if (savedWallet) {
-        setWalletBalance(savedWallet);
       } else {
-        setWalletBalance("0.00");
+        console.warn("Wallet fetch failed:", data.message);
+        fallbackToLocalStorage();
       }
+    } catch (error) {
+      console.error("Error fetching wallet balance:", error);
+      fallbackToLocalStorage();
+    } finally {
       setLoadingWallet(false);
     }
+  }, []);
 
-    fetchWalletBalance();
-  }, [user]);
+  const fallbackToLocalStorage = useCallback(() => {
+    const savedWallet = localStorage.getItem("wallet_balance");
+    if (savedWallet) {
+      setWalletBalance(savedWallet);
+    } else {
+      setWalletBalance("0.00");
+    }
+    setLoadingWallet(false);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchWalletBalance(user.id);
+  }, [user, fetchWalletBalance]);
 
   const handleLogoutConfirm = () => {
     setShowLogoutModal(false);
-    
     localStorage.clear();
     sessionStorage.clear();
     toast.success('Logged out successfully', {
@@ -119,20 +118,24 @@ export default function Profile() {
   };
 
   const handleDeleteAccount = async () => {
+    if (!user?.id) return;
+    
     setShowDeleteModal(false);
     
     try {
       setDeletingAccount(true);
       
-      const response = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/delete_account/${user?.id}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        }
-      );
+      // Use Next.js API proxy - CORS safe
+      const response = await fetch(`/api/delete-account/${user.id}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -141,7 +144,6 @@ export default function Profile() {
           duration: 4000,
           position: 'top-right'
         });
-        
         localStorage.clear();
         sessionStorage.clear();
         router.replace('/');

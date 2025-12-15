@@ -100,7 +100,7 @@ export default function Outlet() {
   const [cartTotal, setCartTotal] = useState<number>(0);
   const [cartCount, setCartCount] = useState<number>(0);
 
-  // ✅ NEW: Store data state with proper null handling
+  // ✅ Store data state with proper null handling
   const [storeData, setStoreData] = useState<StoreData>({
     name: "Vertige Investment Group Annual Summit",
     image: null
@@ -125,41 +125,75 @@ export default function Outlet() {
 
   const handleButtonClick = () => router.back();
 
-  // ✅ NEW: Fetch store data
+  // ✅ NEW: Fetch store data WITH LOCALSTORAGE PERSISTENCE
   useEffect(() => {
-  const fetchStoreData = async () => {
-    try {
-      const res = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers"
-      );
-      const data = await res.json();
-
-      if (data.status === "1" && Array.isArray(data.shops)) {
-        const shop = data.shops.find(
-          (s: { id: string }) => String(s.id) === String(shopId)
+    const fetchStoreData = async () => {
+      try {
+        const res = await fetch(
+          "https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers"
         );
+        const data = await res.json();
 
-        if (shop) {
+        if (data.status === "1" && Array.isArray(data.shops)) {
+          const shop = data.shops.find(
+            (s: { id: string }) => String(s.id) === String(shopId)
+          );
+
+          if (shop) {
+            const selectedShopData = {
+              id: shop.id,
+              name: shop.name || "Vertige Investment Group Annual Summit",
+              image: shop.image || null,
+            };
+
+            // ✅ STORE SELECTED SHOP IN LOCALSTORAGE
+            localStorage.setItem("selected_shop", JSON.stringify(selectedShopData));
+            
+            setStoreData({
+              name: selectedShopData.name,
+              image: selectedShopData.image,
+            });
+          } else {
+            // fallback if no matching shop
+            const fallbackShopData = {
+              id: shopId,
+              name: "Vertige Investment Group Annual Summit",
+              image: null,
+            };
+            
+            localStorage.setItem("selected_shop", JSON.stringify(fallbackShopData));
+            
+            setStoreData({
+              name: fallbackShopData.name,
+              image: fallbackShopData.image,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching store data:", err);
+      }
+    };
+
+    fetchStoreData();
+  }, [shopId]);
+
+  // ✅ NEW: Hydrate store data from localStorage on mount
+  useEffect(() => {
+    const storedShop = localStorage.getItem("selected_shop");
+    if (storedShop) {
+      try {
+        const parsed = JSON.parse(storedShop);
+        if (String(parsed.id) === shopId) {
           setStoreData({
-            name: shop.name || "Vertige Investment Group Annual Summit",
-            image: shop.image || null,
-          });
-        } else {
-          // fallback if no matching shop
-          setStoreData({
-            name: "Vertige Investment Group Annual Summit",
-            image: null,
+            name: parsed.name,
+            image: parsed.image,
           });
         }
+      } catch (e) {
+        console.error("Error parsing stored shop data:", e);
       }
-    } catch (err) {
-      console.error("Error fetching store data:", err);
     }
-  };
-
-  fetchStoreData();
-}, [shopId]);
-
+  }, [shopId]);
 
   useEffect(() => {
     const handleScroll = () => {

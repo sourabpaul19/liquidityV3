@@ -34,13 +34,14 @@ interface Order {
   created_at: string;
   order_type: string;
   payment_type: string;
-  status: string;
   amount: string;
   tax_amount: string;
   tips: string;
   total_amount: string;
   products: Product[];
   shop: Shop;
+  sqaure_order_id?: string;
+  square_status?: string;
 }
 
 export default function OrderDetails() {
@@ -48,11 +49,16 @@ export default function OrderDetails() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch initial order details
   useEffect(() => {
     const fetchOrderDetails = async () => {
+      if (!id) return;
+      
       try {
+        setLoading(true);
         const res = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`
+          `https://liquiditybars.com/canada/backend/admin/api/orderDetails/${id}`,
+          { cache: 'no-store' }
         );
         const data = await res.json();
 
@@ -68,8 +74,41 @@ export default function OrderDetails() {
       }
     };
 
-    if (id) fetchOrderDetails();
+    fetchOrderDetails();
   }, [id]);
+
+  // Fetch and poll Square order status
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    const fetchSquareStatus = async () => {
+      if (!order?.sqaure_order_id) return;
+
+      try {
+        const res = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`,
+          { cache: 'no-store' }
+        );
+        const data = await res.json();
+
+        // Handle API response: {"status":"1","message":"...","square_order_status":"PROPOSED"}
+        if (data.status === "1" && data.square_order_status) {
+          setOrder(prev => prev ? { ...prev, square_status: data.square_order_status } : null);
+        }
+      } catch (error) {
+        console.error("Square status fetch failed:", error);
+      }
+    };
+
+    if (order?.sqaure_order_id) {
+      fetchSquareStatus(); // Initial fetch
+      interval = setInterval(fetchSquareStatus, 10000); // Poll every 10 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [order?.sqaure_order_id]);
 
   if (loading) {
     return (
@@ -85,25 +124,23 @@ export default function OrderDetails() {
     );
   }
 
-  // ✅ Status mapping
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "0":
-        return "🕒 Pending";
-      case "1":
-        return "🆕 New";
-      case "2":
-        return "✅ Accepted";
-      case "3":
-        return "🍽️ Served";
-      case "4":
-        return "❌ Cancelled";
+  // Square status mapping (exclusive - no backend fallback)
+  const getSquareStatusLabel = (squareStatus?: string) => {
+    if (!squareStatus) return "🕒 Checking Square status...";
+
+    switch (squareStatus.toUpperCase()) {
+      case "PROPOSED":
+        return "Received";
+      case "RESERVED":
+        return "Preparing";
+      case "PREPARED":
+        return "Ready";
       default:
-        return "Unknown";
+        return `Square: ${squareStatus}`;
     }
   };
 
-  // ✅ Order type mapping
+  // Order type mapping
   const getOrderTypeLabel = (type: string) => {
     switch (type) {
       case "1":
@@ -117,7 +154,7 @@ export default function OrderDetails() {
     }
   };
 
-  // ✅ Payment type mapping
+  // Payment type mapping
   const getPaymentTypeLabel = (type: string) => {
     switch (type) {
       case "1":
@@ -132,7 +169,11 @@ export default function OrderDetails() {
   const getFormattedDate = (created_at: string) => {
     if (!created_at) return "N/A";
     const date = new Date(created_at.replace(" ", "T"));
-    return date.toLocaleDateString("en-GB"); // DD/MM/YYYY format
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric", 
+      year: "numeric"
+    });
   };
 
   const getFormattedTime = (created_at: string) => {
@@ -199,9 +240,10 @@ export default function OrderDetails() {
                   <p>Order ID</p>
                   <h5>{order.unique_id}</h5>
                 </div>
+                {/* ✅ Square Status Only */}
                 <div className={styles.faqItem}>
                   <p>Status</p>
-                  <h5>{getStatusLabel(order.status)}</h5>
+                  <h5>{getSquareStatusLabel(order.square_status)}</h5>
                 </div>
               </div>
 

@@ -12,7 +12,9 @@ interface Order {
   total_amount: string;
   order_date: string;
   created_at: string;
-  status: string;
+  // status: string; // ❌ no longer needed if you fully move to Square
+  square_status?: string;
+  sqaure_order_id?: string; // if you have it on the order list response
   shop: {
     name: string;
     image: string;
@@ -22,6 +24,23 @@ interface Order {
 export default function MyOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fetch Square status for a specific Square order id
+  const fetchSquareStatus = async (squareOrderId: string): Promise<string | null> => {
+    try {
+      const url = `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${squareOrderId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.status === "1" && data.square_order_status) {
+        return data.square_order_status as string;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching Square status for order ${squareOrderId}:`, error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -37,7 +56,21 @@ export default function MyOrders() {
         const data = await res.json();
 
         if (data.status === "1" && data.orders) {
-          setOrders(data.orders);
+          // For each order, call the Square status API using its square_order_id
+          const ordersWithSquareStatus = await Promise.all(
+            data.orders.map(async (order: Order) => {
+              const squareOrderId = order.sqaure_order_id; // ensure this matches backend key
+              if (!squareOrderId) return order;
+
+              const squareStatus = await fetchSquareStatus(squareOrderId);
+              return {
+                ...order,
+                square_status: squareStatus || order.square_status,
+              };
+            })
+          );
+
+          setOrders(ordersWithSquareStatus);
         } else {
           setOrders([]);
         }
@@ -51,21 +84,29 @@ export default function MyOrders() {
     fetchOrders();
   }, []);
 
-  const getOrderStatus = (status: string) => {
-    switch (status) {
-      case '0':
-        return 'Order Placed';
-      case '1':
-        return 'Accepted';
-      case '2':
+  // Only Square → UI text mapping
+  const getOrderStatus = (square_status?: string) => {
+    switch (square_status) {
+      case 'PROPOSED':
+        return 'Received';
+      case 'RESERVED':
+        return 'Preparing';
+      case 'PREPARED':
         return 'Ready';
-      case '3':
-        return 'Completed';
-      case '4':
-        return 'Cancelled';
       default:
         return 'Pending';
     }
+  };
+
+  const getFormattedDate = (created_at: string) => {
+    if (!created_at) return "N/A";
+
+    const date = new Date(created_at.replace(" ", "T"));
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    });
   };
 
   return (
@@ -93,7 +134,7 @@ export default function MyOrders() {
 
                     <div className={styles.orderText + " flex-1"}>
                       <h5>{order.shop?.name}</h5>
-                      <p>{order.order_date || order.created_at}</p>
+                      <p>{getFormattedDate(order.created_at)}</p>
                     </div>
 
                     <div className="text-right">
@@ -103,7 +144,7 @@ export default function MyOrders() {
 
                   <div className={styles.orderBottom}>
                     <div className="text-primary font-medium">
-                      {getOrderStatus(order.status)}
+                      {getOrderStatus(order.square_status)}
                     </div>
                     <Link href={`/order-details/${order.id}`} className="text-primary font-medium">
                       View Details

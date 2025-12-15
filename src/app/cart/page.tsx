@@ -355,7 +355,8 @@ export default function Cart() {
 
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
   //const baseTotal = cartTotal + 1 + 3.57 + tipValue; // Subtotal + Service + Taxes + Tips
-  const baseTotal = cartTotal + 2.6 + tipValue; // Subtotal + Service + Taxes + Tips
+  const taxes = cartTotal * 0.13;
+  const baseTotal = cartTotal + taxes + tipValue; // Subtotal + Service + Taxes + Tips
   const walletAmountToUse = Math.min(walletBalance, baseTotal);
   const remainingAmount = Math.max(0, baseTotal - walletBalance);
   const finalTotalAmount = baseTotal.toFixed(2);
@@ -836,7 +837,7 @@ export default function Cart() {
 
               <div className={styles.billingItem}>
                 <p>Taxes & Other Fees</p>
-                <p>$2.6</p>
+                <p>${taxes}</p>
               </div>
 
               <div className={styles.billingItem}>

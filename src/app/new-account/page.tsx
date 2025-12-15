@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import styles from "./account.module.scss";
 import Image from "next/image";
@@ -11,6 +11,7 @@ import "react-datepicker/dist/react-datepicker.css";
 
 export default function NewAccount() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [userId, setUserId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -25,21 +26,27 @@ export default function NewAccount() {
     confirmPassword: "",
   });
 
-  // ✅ Get stored user_id from localStorage
+  // Get stored user_id and phone from localStorage
   useEffect(() => {
     const storedId = localStorage.getItem("user_id");
     const storedMobile = localStorage.getItem("user_mobile");
     if (storedId) setUserId(storedId);
-    if (storedMobile) setForm((prev) => ({ ...prev, phone: storedMobile }));
+    if (storedMobile) {
+      setForm((prev) => ({ ...prev, phone: storedMobile }));
+    }
   }, []);
 
   // Calculate minimum allowed date (must be at least 18 years old)
   const today = new Date();
-  const minAgeDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+  const minAgeDate = new Date(
+    today.getFullYear() - 18,
+    today.getMonth(),
+    today.getDate()
+  );
 
   const handleButtonClick = () => router.back();
 
-  // ✅ Handle form submission
+  // Handle form submission
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -81,15 +88,23 @@ export default function NewAccount() {
       const data = await response.json();
       console.log("Update Profile Response:", data);
 
-      if (data.status === "1" || data.status === 1 || data.status === true) {
+      const ok =
+        data.status === "1" || data.status === 1 || data.status === true;
+
+      if (ok) {
         alert("✅ Account created successfully!");
 
         // Update local storage
-        localStorage.setItem("user_name", `${form.firstName} ${form.lastName}`);
+        localStorage.setItem(
+          "user_name",
+          `${form.firstName} ${form.lastName}`
+        );
         localStorage.setItem("user_email", form.email);
         localStorage.setItem("isLoggedIn", "true");
 
-        router.push("/home");
+        // Decide where to go next: /checkout if coming from OTP+cart flow, else /home
+        const next = searchParams.get("next") || "/home";
+        router.push(next);
       } else {
         alert(data.message || "Something went wrong. Please try again.");
       }
@@ -142,7 +157,9 @@ export default function NewAccount() {
                   className={`${styles.textbox} rounded-lg`}
                   placeholder="First Name"
                   value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, firstName: e.target.value })
+                  }
                   required
                 />
                 <input
@@ -150,12 +167,16 @@ export default function NewAccount() {
                   className={`${styles.textbox} rounded-lg`}
                   placeholder="Last Name"
                   value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, lastName: e.target.value })
+                  }
                   required
                 />
                 <DatePicker
                   selected={form.dob}
-                  onChange={(date) => setForm({ ...form, dob: date })}
+                  onChange={(date) =>
+                    setForm({ ...form, dob: date as Date | null })
+                  }
                   dateFormat="yyyy-MM-dd"
                   placeholderText="Date of Birth"
                   maxDate={minAgeDate}
@@ -168,7 +189,9 @@ export default function NewAccount() {
                   className={`${styles.textbox} rounded-lg`}
                   placeholder="Email"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, email: e.target.value })
+                  }
                   required
                 />
                 <input
@@ -183,7 +206,9 @@ export default function NewAccount() {
                   className={`${styles.textbox} rounded-lg`}
                   placeholder="Password"
                   value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
                   required
                 />
                 <input
@@ -191,7 +216,9 @@ export default function NewAccount() {
                   className={`${styles.textbox} rounded-lg`}
                   placeholder="Confirm Password"
                   value={form.confirmPassword}
-                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, confirmPassword: e.target.value })
+                  }
                   required
                 />
 

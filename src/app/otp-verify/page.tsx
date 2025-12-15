@@ -50,7 +50,7 @@ export default function OTPVerify() {
         : null;
 
     if (phoneParam) setMobile(phoneParam);
-    else if (savedMobile) setMobile(savedMobile);
+    else if (savedMobile) setMobile(savedMobile || "");
   }, [params]);
 
   const handleBack = () => router.back();
@@ -184,12 +184,10 @@ export default function OTPVerify() {
           (tempCartRes.status === "1" ||
             tempCartRes.status === 1 ||
             tempCartRes.status === true) &&
-          (
-            (Array.isArray(tempCartRes.cartItems) &&
-              tempCartRes.cartItems!.length > 0) ||
+          ((Array.isArray(tempCartRes.cartItems) &&
+            tempCartRes.cartItems!.length > 0) ||
             (Array.isArray(tempCartRes.data) &&
-              tempCartRes.data!.length > 0)
-          );
+              tempCartRes.data!.length > 0));
 
         if (hasTempCart) {
           // Transfer temp cart to user cart
@@ -203,15 +201,21 @@ export default function OTPVerify() {
               transferRes.status === 1 ||
               transferRes.status === true);
 
-          if (transferOk) {
-            toast.success("Cart transferred successfully!");
-          } else {
+          if (!transferOk) {
             toast.error(
-              "Cart transfer failed but continuing to checkout. You can add items again."
+              "Cart transfer failed but continuing. You can add items again."
             );
+          } else {
+            toast.success("Cart transferred successfully!");
           }
 
-          router.push("/checkout");
+          // After transfer: if user has no profile, go to new-account then checkout
+          if (!user.name || user.name.trim() === "") {
+            router.push("/new-account?next=/checkout");
+          } else {
+            router.push("/checkout");
+          }
+
           return;
         }
 
