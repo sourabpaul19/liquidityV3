@@ -119,7 +119,7 @@ export default function MyOrders() {
   return (
     <>
       <Header title="My Orders" />
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer py-4">
           {loading ? (
             <div className="text-center py-10 text-gray-500">

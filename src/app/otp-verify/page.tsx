@@ -161,7 +161,7 @@ export default function OTPVerify() {
           (localStorage.getItem("device_id") || "")) ||
         "";
 
-      // Save session
+      // Save session in localStorage (client-side)
       if (typeof window !== "undefined") {
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("user_id", user.id || "");
@@ -170,6 +170,19 @@ export default function OTPVerify() {
         localStorage.setItem("user_mobile", user.mobile || mobile);
         localStorage.setItem("user_dob", user.dob || "");
         localStorage.setItem("userData", JSON.stringify(user));
+      }
+
+      // NEW: set auth cookie so middleware sees login
+      try {
+        await fetch("/api/set-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: user.id, // or JWT if you have one
+          }),
+        });
+      } catch (err) {
+        console.error("set-session error:", err);
       }
 
       // Temp cart → user cart using transferFromTempCart
