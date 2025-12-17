@@ -53,26 +53,54 @@ export default function OrderDetails() {
   const [loading, setLoading] = useState(true);
 
   // ✅ PERFECT BACK LOGIC - Covers ALL 6 scenarios
-  const handleBackClick = useCallback(() => {
-    const status = order?.square_status?.toUpperCase();
+  // const handleBackClick = useCallback(() => {
+  //   const status = order?.square_status?.toUpperCase();
     
-    if (status === 'COMPLETED') {
-      // Check if came from order-success
-      const fromPage = searchParams.get('from');
-      const referrer = document.referrer || '';
+  //   if (status === 'COMPLETED') {
+  //     // Check if came from order-success
+  //     const fromPage = searchParams.get('from');
+  //     const referrer = document.referrer || '';
       
-      if (fromPage === 'order-success' || referrer.includes('/order-success/')) {
-        // Case 5: order-success → order-details (COMPLETED) → home
-        router.push('/home');
-      } else {
-        // Cases 1, 4: from order-status → order-details (COMPLETED) → ongoing-orders
-        router.push('/ongoing-orders');
-      }
+  //     if (fromPage === 'order-success' || referrer.includes('/order-success/')) {
+  //       // Case 5: order-success → order-details (COMPLETED) → home
+  //       router.push('/home');
+  //     } else {
+  //       // Cases 1, 4: from order-status → order-details (COMPLETED) → ongoing-orders
+  //       router.push('/ongoing-orders');
+  //     }
+  //   } else {
+  //     // Cases 1(NOT COMPLETED), 2, 3, 6: normal back navigation
+  //     router.back();
+  //   }
+  // }, [order?.square_status, searchParams, router]);
+
+
+  // Add this console.log inside handleBackClick to debug fromPage
+const handleBackClick = useCallback(() => {
+  const status = order?.square_status?.toUpperCase();
+  const referrer = document.referrer || '';
+  
+  console.log('🔍 DEBUG - square_status:', status);
+  console.log('🔍 DEBUG - referrer:', referrer);
+  
+  if (status === 'COMPLETED') {
+    if (referrer.includes('/order-success/')) {
+      console.log('🚀 COMPLETED + /order-success/orderid → /home');
+      router.push('/home');
+    } else if (referrer.includes('/order-status/')) {
+      console.log('🚀 COMPLETED + /order-status/orderid → /ongoing-orders');
+      router.push('/ongoing-orders');
     } else {
-      // Cases 1(NOT COMPLETED), 2, 3, 6: normal back navigation
-      router.back();
+      console.log('🚀 COMPLETED + other → /ongoing-orders');
+      router.push('/ongoing-orders');
     }
-  }, [order?.square_status, searchParams, router]);
+  } else {
+    console.log('🔙 NOT COMPLETED → normal back');
+    router.back();
+  }
+}, [order?.square_status, router]);
+
+
 
   // Fetch initial order details
   useEffect(() => {
