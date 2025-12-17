@@ -35,7 +35,7 @@ export function middleware(request: NextRequest) {
   console.log('TOKEN IN MW:', token);
 
   if (!token) {
-    const loginUrl = new URL('/login', request.url);
+    const loginUrl = new URL('/welcome', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }
