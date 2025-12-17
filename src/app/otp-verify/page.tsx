@@ -41,7 +41,7 @@ export default function OTPVerify() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Prefill mobile
+  // Prefill mobile from query or localStorage
   useEffect(() => {
     const phoneParam = params.get("phone");
     const savedMobile =
@@ -55,7 +55,7 @@ export default function OTPVerify() {
 
   const handleBack = () => router.back();
 
-  // --- API helpers ---
+  // ---------- API helpers ----------
 
   const fetchTempCart = async (
     userId: string,
@@ -111,7 +111,7 @@ export default function OTPVerify() {
     }
   };
 
-  // Clear existing logged‑in cart
+  // Clear existing logged‑in cart BEFORE transfer
   const clearUserCart = async (userId: string): Promise<boolean> => {
     try {
       const url = `https://liquiditybars.com/canada/backend/admin/api/clearCartForUser/${userId}`;
@@ -131,7 +131,7 @@ export default function OTPVerify() {
     }
   };
 
-  // --- OTP handler ---
+  // ---------- OTP handler ----------
 
   const handleVerify = async (e: FormEvent) => {
     e.preventDefault();
@@ -144,6 +144,7 @@ export default function OTPVerify() {
     setLoading(true);
 
     try {
+      // 1. Verify OTP
       const formData = new URLSearchParams();
       formData.append("mobile", mobile.startsWith("+") ? mobile : mobile);
       formData.append("otp", otp);
@@ -176,7 +177,7 @@ export default function OTPVerify() {
       toast.success("OTP verified successfully!");
       const user = data.user;
 
-      // Save session in localStorage
+      // 2. Save session in localStorage
       if (typeof window !== "undefined") {
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("user_id", user.id || "");
@@ -187,7 +188,7 @@ export default function OTPVerify() {
         localStorage.setItem("userData", JSON.stringify(user));
       }
 
-      // Set auth cookie for middleware
+      // 3. Set auth cookie for middleware
       try {
         await fetch("/api/set-session", {
           method: "POST",
@@ -203,14 +204,19 @@ export default function OTPVerify() {
           ? localStorage.getItem("device_id") || ""
           : "";
 
-      let shouldGoToCart = false;
+      // consider user "new / incomplete" if any required field is missing
+      const profileIncomplete =
+        !user.name?.trim() || !user.email?.trim() || !user.dob?.trim();
 
+      let hasTempCart = false;
+
+      // 4. If temp cart exists: clear old cart → transfer
       if (deviceId) {
         console.log("Checking temp cart for device:", deviceId);
 
         const tempCartRes = await fetchTempCart(user.id, deviceId);
 
-        const hasTempCart =
+        hasTempCart =
           !!tempCartRes &&
           (tempCartRes.status === "1" ||
             tempCartRes.status === 1 ||
@@ -223,15 +229,11 @@ export default function OTPVerify() {
         console.log("Has temp cart:", hasTempCart);
 
         if (hasTempCart) {
-          shouldGoToCart = true;
-
-          // 1) Clear existing logged-in cart
           const cleared = await clearUserCart(user.id);
           if (!cleared) {
             toast.error("Could not clear old cart. Continuing with transfer.");
           }
 
-          // 2) Transfer temp cart into user cart
           console.log("Transferring temp cart to user cart...");
           const transferRes = await transferFromTempCart(user.id, deviceId);
 
@@ -249,12 +251,19 @@ export default function OTPVerify() {
         }
       }
 
-      const hasProfileName = !!user.name && user.name.trim() !== "";
-
-      if (shouldGoToCart) {
+      // 5. Final navigation:
+      // - profileIncomplete + temp cart ⇒ /new-account?next=/cart
+      // - profileIncomplete + no temp cart ⇒ /new-account
+      // - complete profile + temp cart ⇒ /cart
+      // - complete profile + no temp cart ⇒ /home
+      if (profileIncomplete) {
+        if (hasTempCart) {
+          router.push("/new-account?next=/cart");
+        } else {
+          router.push("/new-account");
+        }
+      } else if (hasTempCart) {
         router.push("/cart");
-      } else if (!hasProfileName) {
-        router.push("/new-account");
       } else {
         router.push("/home");
       }
