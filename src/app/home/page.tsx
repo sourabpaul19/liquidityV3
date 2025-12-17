@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Thumbs, Navigation, Autoplay } from 'swiper/modules';
 import { useRouter } from 'next/navigation';
@@ -16,7 +16,7 @@ import Link from 'next/link';
 import Modal from '@/components/common/Modal/Modal';
 
 // -------------------------------
-// 🟦 Custom Types
+// Types
 // -------------------------------
 interface Banner {
   id: number;
@@ -35,20 +35,23 @@ interface Order {
   id: string | number;
   status: number | string;
   sqaure_order_id?: string;
+  square_order_status?: string;
 }
 
-interface OrderResponse {
-  status: string;
-  orders: Order[];
+interface DashboardResponse {
+  status: string | number;
+  banners?: Banner[];
+  shops?: Shop[];
+  last_orders?: Order[];
+  message?: string;
 }
 
 // --------------------------------
-// 🟦 Component
+// Component
 // --------------------------------
 export default function HomePage() {
   const router = useRouter();
 
-  // State
   const [loading, setLoading] = useState(true);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -56,140 +59,79 @@ export default function HomePage() {
   const [ongoingOrder, setOngoingOrder] = useState<Order | null>(null);
 
   const [showDistanceModal, setShowDistanceModal] = useState(false);
-  const [tempSelectedDistance, setTempSelectedDistance] = useState<{ id: number; name: string } | null>(null);
-
-  // Polling refs
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(true);
+  const [tempSelectedDistance, setTempSelectedDistance] =
+    useState<{ id: number; name: string } | null>(null);
 
   // --------------------------------
-  // 🟦 Find LAST active order (not COMPLETED)
-  // --------------------------------
-  const findLastActiveOrder = useCallback(async (orders: Order[]): Promise<Order | null> => {
-    const activeOrders: Order[] = [];
-    
-    // Check each order with status [0,1,2]
-    for (const order of orders.filter(o => [0, 1, 2].includes(Number(o.status)))) {
-      try {
-        // Skip if no sqaure_order_id
-        if (!order.sqaure_order_id) {
-          console.log(`Order ${order.id} skipped - no sqaure_order_id`);
-          continue;
-        }
-
-        // Check Square status
-        const squareRes = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`
-        );
-        const squareData = await squareRes.json();
-
-        // Add to active list if NOT COMPLETED
-        if (squareData.status === '1' && squareData.square_order_status !== 'COMPLETED') {
-          console.log(`Order ${order.id} is ACTIVE: ${squareData.square_order_status}`);
-          activeOrders.push(order);
-        } else {
-          console.log(`Order ${order.id} is COMPLETED: ${squareData.square_order_status}`);
-        }
-      } catch (err) {
-        console.warn(`Square status check failed for order ${order.id}:`, err);
-        // Skip failed checks - don't treat as active
-        continue;
-      }
-    }
-
-    // Return LAST active order (most recent)
-    return activeOrders.length > 0 ? activeOrders[activeOrders.length - 1] : null;
-  }, []);
-
-  // --------------------------------
-  // 🟦 Poll for order updates every 10 seconds
-  // --------------------------------
-  const pollForOrders = useCallback(async () => {
-    if (!isMountedRef.current) return;
-
-    try {
-      const userId = localStorage.getItem('user_id');
-      if (!userId) return;
-
-      const orderRes = await fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`);
-      const orderData: OrderResponse = await orderRes.json();
-
-      if (orderData.status === '1' && Array.isArray(orderData.orders)) {
-        console.log('🔄 Polling orders...');
-        const lastActiveOrder = await findLastActiveOrder(orderData.orders);
-        setOngoingOrder(lastActiveOrder);
-        
-        console.log('Last active order:', lastActiveOrder?.id || 'None');
-      }
-    } catch (err) {
-      console.error('Polling error:', err);
-    }
-  }, [findLastActiveOrder]);
-
-  // --------------------------------
-  // 🟦 Initial fetch + setup polling
+  // Initial load: use cache first, then fetch
   // --------------------------------
   useEffect(() => {
+    const userId = localStorage.getItem('user_id');
+    if (!userId) {
+      router.push('/');
+      return;
+    }
+
+    // 1) Hydrate from localStorage to reduce perceived loading
+    const cachedShops = localStorage.getItem('shops');
+    if (cachedShops) {
+      try {
+        const parsed = JSON.parse(cachedShops) as Shop[];
+        if (Array.isArray(parsed)) {
+          setShops(parsed);
+          setLoading(false); // show UI quickly
+        }
+      } catch {
+        // ignore JSON error, will refetch
+      }
+    }
+
+    // 2) Fetch fresh dashboard data
     const fetchDashboardData = async () => {
       try {
-        const userId = localStorage.getItem('user_id');
-        if (!userId) {
-          router.push('/');
-          return;
-        }
+        const dashboardRes = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`,
+          { cache: 'no-store' }
+        );
+        const dashboardData: DashboardResponse = await dashboardRes.json();
 
-        setOngoingOrder(null);
-
-        const [dashboardRes, orderRes] = await Promise.all([
-          fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForUsers/${userId}`),
-          fetch(`https://liquiditybars.com/canada/backend/admin/api/orderList/${userId}`)
-        ]);
-
-        const dashboardData = await dashboardRes.json();
-        const orderData: OrderResponse = await orderRes.json();
-
-        // Dashboard data
         if (dashboardData.status === '1' || dashboardData.status === 1) {
           setBanners(dashboardData.banners || []);
           setShops(dashboardData.shops || []);
 
-          if (dashboardData.shops?.length > 0) {
+          if ((dashboardData.shops?.length ?? 0) > 0) {
             localStorage.setItem('shops', JSON.stringify(dashboardData.shops));
           }
+
+          // ✅ Only treat PROPOSED orders as ongoing
+          const lastOrders: Order[] = dashboardData.last_orders || [];
+          const proposedOrders = lastOrders.filter(
+            (o) => o.square_order_status === 'PROPOSED'
+          );
+          const lastProposedOrder =
+            proposedOrders.length > 0
+              ? proposedOrders[proposedOrders.length - 1]
+              : null;
+
+          setOngoingOrder(lastProposedOrder);
         } else {
           setError(dashboardData.message || 'Failed to load data');
         }
-
-        // 🟦 Initial active order check
-        if (orderData.status === '1' && Array.isArray(orderData.orders)) {
-          const lastActiveOrder = await findLastActiveOrder(orderData.orders);
-          setOngoingOrder(lastActiveOrder);
-        }
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError('Something went wrong while fetching data');
-        setOngoingOrder(null);
+        if (shops.length === 0) {
+          setError('Something went wrong while fetching data');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchDashboardData();
-
-    // 🟦 Start polling every 10 seconds
-    intervalRef.current = setInterval(pollForOrders, 10000);
-
-    return () => {
-      // Cleanup
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      isMountedRef.current = false;
-    };
-  }, [router, findLastActiveOrder, pollForOrders]);
+  }, [router, shops.length]);
 
   // --------------------------------
-  // 🟦 Store selected shop
+  // Store selected shop
   // --------------------------------
   const handleSelectShop = (shop: Shop) => {
     localStorage.setItem('selected_shop', JSON.stringify(shop));
@@ -197,9 +139,9 @@ export default function HomePage() {
   };
 
   // --------------------------------
-  // 🟦 Loading / Error UI
+  // Loading / Error UI
   // --------------------------------
-  if (loading) {
+  if (loading && shops.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p className="text-gray-600">Loading...</p>
@@ -207,7 +149,7 @@ export default function HomePage() {
     );
   }
 
-  if (error) {
+  if (error && shops.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <p className="text-red-600">{error}</p>
@@ -224,11 +166,10 @@ export default function HomePage() {
   return (
     <>
       <Header buttonType="menu" />
-      
+
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer py-4">
-
-          {/* 🟦 Banner Slider */}
+          {/* Banner Slider */}
           {banners.length > 0 && (
             <Swiper
               modules={[Thumbs, Navigation, Autoplay]}
@@ -239,15 +180,22 @@ export default function HomePage() {
                 320: { slidesPerView: 1.05 },
                 640: { slidesPerView: 2.2 },
                 768: { slidesPerView: 3.3 },
-                1024: { slidesPerView: 3.3 }
+                1024: { slidesPerView: 3.3 },
               }}
               className={styles.bannerSlider}
             >
-              {banners.map((banner) => (
+              {banners.map((banner, index) => (
                 <SwiperSlide key={banner.id}>
                   <div className="relative overflow-hidden rounded-xl shadow-md">
                     <figure className={styles.bannerImage}>
-                      <Image src={banner.image} alt="Banner" fill sizes="100vw" priority />
+                      <Image
+                        src={banner.image}
+                        alt="Banner"
+                        fill
+                        sizes="100vw"
+                        // priority only on first image to reduce load
+                        priority={index === 0}
+                      />
                     </figure>
                   </div>
                 </SwiperSlide>
@@ -256,21 +204,27 @@ export default function HomePage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 px-4">
-            <Link href="/ongoing-orders" className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white">
+            <Link
+              href="/ongoing-orders"
+              className="bg-black px-3 py-3 flex justify-center rounded-lg w-full text-white"
+            >
               Ongoing and Past Orders
             </Link>
           </div>
 
-          {/* 🟦 Bars Section */}
+          {/* Bars Section */}
           <div className="container-fluid mt-6">
             <div className="sectionHeading flex justify-between items-center">
               <h4 className="section_title">Bars</h4>
-              <button className={styles.mixerButton} onClick={() => setShowDistanceModal(true)}>
+              <button
+                className={styles.mixerButton}
+                onClick={() => setShowDistanceModal(true)}
+              >
                 <SlidersHorizontal size={20} />
               </button>
             </div>
 
-            {/* 🟦 Distance Modal */}
+            {/* Distance Modal */}
             <Modal
               isOpen={showDistanceModal}
               onClose={() => setShowDistanceModal(false)}
@@ -281,7 +235,9 @@ export default function HomePage() {
                   <MapPinned size={20} />
                   <span className="text-sm font-medium">
                     Select Distance:{' '}
-                    <strong>{tempSelectedDistance ? `${tempSelectedDistance.name}` : '0'} km</strong>
+                    <strong>
+                      {tempSelectedDistance ? `${tempSelectedDistance.name}` : '0'} km
+                    </strong>
                   </span>
                 </div>
 
@@ -305,14 +261,15 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-6 flex justify-end gap-3">
-                  <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg" onClick={() => setShowDistanceModal(false)}>
+                  <button
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg"
+                    onClick={() => setShowDistanceModal(false)}
+                  >
                     Cancel
                   </button>
                   <button
                     className="bg-primary text-white px-4 py-2 rounded-lg"
-                    onClick={() => {
-                      setShowDistanceModal(false);
-                    }}
+                    onClick={() => setShowDistanceModal(false)}
                   >
                     Confirm
                   </button>
@@ -323,9 +280,19 @@ export default function HomePage() {
             {shops.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
                 {shops.map((shop) => (
-                  <article key={shop.id} onClick={() => handleSelectShop(shop)} className="cursor-pointer">
+                  <article
+                    key={shop.id}
+                    onClick={() => handleSelectShop(shop)}
+                    className="cursor-pointer"
+                  >
                     <figure className={styles.barImage}>
-                      <Image src={shop.image} alt={shop.name} fill sizes="100vw" className="rounded-xl object-cover" />
+                      <Image
+                        src={shop.image}
+                        alt={shop.name}
+                        fill
+                        sizes="100vw"
+                        className="rounded-xl object-cover"
+                      />
                     </figure>
                     <figcaption className={styles.barContent}>
                       <div className={styles.left}>
@@ -348,7 +315,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 🟦 Sticky Active Order - UPDATES EVERY 10s */}
+        {/* Sticky Active Order - PROPOSED only */}
         {ongoingOrder && (
           <Link href={`/order-status/${ongoingOrder.id}`} className={styles.stickyMessage}>
             <p>You have an Order In-Progress. Click to see your order status.</p>

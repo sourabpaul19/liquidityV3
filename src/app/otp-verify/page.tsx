@@ -111,6 +111,26 @@ export default function OTPVerify() {
     }
   };
 
+  // Clear existing logged‑in cart
+  const clearUserCart = async (userId: string): Promise<boolean> => {
+    try {
+      const url = `https://liquiditybars.com/canada/backend/admin/api/clearCartForUser/${userId}`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      const data = await res.json();
+      console.log("clearCartForUser RESPONSE:", data);
+
+      return data.status === "1" || data.status === 1 || data.status === true;
+    } catch (err) {
+      console.error("clearCartForUser error:", err);
+      return false;
+    }
+  };
+
   // --- OTP handler ---
 
   const handleVerify = async (e: FormEvent) => {
@@ -156,12 +176,7 @@ export default function OTPVerify() {
       toast.success("OTP verified successfully!");
       const user = data.user;
 
-      const deviceId =
-        (typeof window !== "undefined" &&
-          (localStorage.getItem("device_id") || "")) ||
-        "";
-
-      // Save session in localStorage (client-side)
+      // Save session in localStorage
       if (typeof window !== "undefined") {
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("user_id", user.id || "");
@@ -172,24 +187,27 @@ export default function OTPVerify() {
         localStorage.setItem("userData", JSON.stringify(user));
       }
 
-      // NEW: set auth cookie so middleware sees login
+      // Set auth cookie for middleware
       try {
         await fetch("/api/set-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: user.id, // or JWT if you have one
-          }),
+          body: JSON.stringify({ token: user.id }),
         });
       } catch (err) {
         console.error("set-session error:", err);
       }
 
-      // Temp cart → user cart using transferFromTempCart
-      if (deviceId) {
-        const loadingToast = toast.loading("Transferring your cart...");
+      const deviceId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("device_id") || ""
+          : "";
 
-        // First check if temp cart exists
+      let shouldGoToCart = false;
+
+      if (deviceId) {
+        console.log("Checking temp cart for device:", deviceId);
+
         const tempCartRes = await fetchTempCart(user.id, deviceId);
 
         const hasTempCart =
@@ -198,15 +216,24 @@ export default function OTPVerify() {
             tempCartRes.status === 1 ||
             tempCartRes.status === true) &&
           ((Array.isArray(tempCartRes.cartItems) &&
-            tempCartRes.cartItems!.length > 0) ||
+            tempCartRes.cartItems.length > 0) ||
             (Array.isArray(tempCartRes.data) &&
-              tempCartRes.data!.length > 0));
+              tempCartRes.data.length > 0));
+
+        console.log("Has temp cart:", hasTempCart);
 
         if (hasTempCart) {
-          // Transfer temp cart to user cart
-          const transferRes = await transferFromTempCart(user.id, deviceId);
+          shouldGoToCart = true;
 
-          toast.dismiss(loadingToast);
+          // 1) Clear existing logged-in cart
+          const cleared = await clearUserCart(user.id);
+          if (!cleared) {
+            toast.error("Could not clear old cart. Continuing with transfer.");
+          }
+
+          // 2) Transfer temp cart into user cart
+          console.log("Transferring temp cart to user cart...");
+          const transferRes = await transferFromTempCart(user.id, deviceId);
 
           const transferOk =
             !!transferRes &&
@@ -214,30 +241,19 @@ export default function OTPVerify() {
               transferRes.status === 1 ||
               transferRes.status === true);
 
-          if (!transferOk) {
-            toast.error(
-              "Cart transfer failed but continuing. You can add items again."
-            );
-          } else {
+          if (transferOk) {
             toast.success("Cart transferred successfully!");
-          }
-
-          // After transfer: if user has no profile, go to new-account then checkout
-          if (!user.name || user.name.trim() === "") {
-            router.push("/new-account?next=/checkout");
           } else {
-            router.push("/checkout");
+            toast.error("Cart transfer failed. You can add items again.");
           }
-
-          return;
         }
-
-        toast.dismiss(loadingToast);
-        toast.success("No previous cart found. Starting fresh!");
       }
 
-      // No temp cart – go by profile
-      if (!user.name || user.name.trim() === "") {
+      const hasProfileName = !!user.name && user.name.trim() !== "";
+
+      if (shouldGoToCart) {
+        router.push("/cart");
+      } else if (!hasProfileName) {
         router.push("/new-account");
       } else {
         router.push("/home");

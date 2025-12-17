@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
 import { ChevronRight, Loader2, Wallet } from "lucide-react";
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
   CardElement,
@@ -114,7 +114,7 @@ function NewCardPaymentForm({
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements || !clientSecret) return;
 
@@ -230,7 +230,7 @@ function ApplePayButtonWrapper({
           clientSecret,
           { payment_method: ev.paymentMethod.id },
           { handleActions: false }
-        ); // recommended pattern for Payment Request Button[web:6][web:50]
+        );
 
       if (confirmError || !paymentIntent) {
         ev.complete("fail");
@@ -479,6 +479,7 @@ export default function Cart() {
     }
   };
 
+  // UPDATED: use backend updateCartData (id + quantity)
   const updateQuantity = async (itemId: string, newQty: number) => {
     const item = cartItems.find((i) => i.id === itemId);
     if (!item) return;
@@ -487,23 +488,29 @@ export default function Cart() {
     setLoading(true);
 
     try {
-      const params = new URLSearchParams();
-      params.append("user_id", userId || "");
-      params.append("item_id", itemId);
-      params.append("quantity", newQty.toString());
+      const formData = new FormData();
+      // According to your note, this endpoint expects id (cart row id) and quantity
+      formData.append("id", itemId);
+      formData.append("quantity", String(newQty));
 
-      const res = await fetch("/api/updateCartItem", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params,
-      });
+      const res = await fetch(
+        "https://liquiditybars.com/canada/backend/admin/api/updateCartData",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data = await res.json();
+
       if (data.status === "1" || data.status === 1) {
         await fetchCart();
       } else {
         alert(data.message || "Could not update quantity.");
       }
+    } catch (err) {
+      console.error("Cart update error:", err);
+      alert("Failed to update cart.");
     } finally {
       setLoading(false);
     }
@@ -768,7 +775,7 @@ export default function Cart() {
 
   /* ----- Checkout handler ----- */
 
-  const handleCheckout = async (e: React.FormEvent) => {
+  const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
 
     const skip = localStorage.getItem("ack_skip_popup");
@@ -796,35 +803,8 @@ export default function Cart() {
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
-          {/* Previous Orders */}
-          {/* <div className="flex flex-col gap-4 p-4">
-            {loadingOrders ? (
-              <p className="text-gray-500">Loading previous orders...</p>
-            ) : oldOrders.length === 0 ? (
-              <p className="text-gray-500">No previous orders found.</p>
-            ) : (
-              oldOrders.map((order) => (
-                <Link
-                  key={order.id}
-                  href={`/order-status/${order.id}`}
-                  className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
-                >
-                  <div>
-                    <h3 className="font-semibold text-lg">
-                      {order.unique_id}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {order.order_date} -
-                      <span className="text-primary font-medium ml-1">
-                        {order.status === "1" ? "New" : "Accepted"}
-                      </span>
-                    </p>
-                  </div>
-                  <ChevronRight size={22} color="gray" />
-                </Link>
-              ))
-            )}
-          </div> */}
+          {/* Previous Orders (currently commented out) */}
+          {/* ... */}
 
           {/* Cart Items */}
           {loading ? (
