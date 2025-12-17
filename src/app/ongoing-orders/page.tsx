@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { ChevronRight } from 'lucide-react';
 import styles from './ongoing-orders.module.scss';
 import Header from '@/components/common/Header/Header';
+import BottomNavigation from '@/components/common/BottomNavigation/BottomNavigation';
 
 interface Order {
   id: string;
@@ -178,6 +179,12 @@ export default function OngoingOrders() {
     });
   };
 
+  // Helper to determine correct href based on status
+  const getOrderLinkHref = (orderId: string, square_status?: string) => {
+    const status = (square_status || 'PENDING').toUpperCase();
+    return status === 'COMPLETED' ? `/order-details/${orderId}` : `/order-status/${orderId}`;
+  };
+
   if (loading) {
     return (
       <>
@@ -214,14 +221,6 @@ export default function OngoingOrders() {
               </div>
             )}
 
-            {/* Refresh indicator */}
-            {/* {refreshing && !loading && (
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <span>Updating status...</span>
-              </div>
-            )} */}
-            
             {orders.length === 0 ? (
               <div className="text-center py-10 text-gray-500">
                 No ongoing orders
@@ -233,41 +232,47 @@ export default function OngoingOrders() {
               </div>
             ) : (
               <>
-                {orders.map((order) => (
-                  <Link 
-                    key={order.id} 
-                    href={`/order-status/${order.id}`} 
-                    className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <figure className="relative w-12 h-12 rounded overflow-hidden flex-shrink-0">
-                        <Image
-                          src={order.shop?.image || "/images/bar.jpg"}
-                          alt={order.shop?.name || "Shop"}
-                          fill
-                          className="object-cover"
-                        />
-                      </figure>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-lg truncate">
-                          LIQ-{order.id.slice(-6)} - {order.shop?.name || 'Unknown'}
-                        </h3>
-                        <p className="text-sm text-gray-600 truncate">
-                          {getFormattedDateTime(order.created_at)} -{' '}
-                          <span className="text-primary font-medium">
-                            {getOrderStatus(order.square_status)}
-                          </span>
-                        </p>
+                {orders.map((order) => {
+                  const isCompleted = (order.square_status || 'PENDING').toUpperCase() === 'COMPLETED';
+                  const href = getOrderLinkHref(order.id, order.square_status);
+                  
+                  return (
+                    <Link 
+                      key={order.id} 
+                      href={href}
+                      className={`${styles.orderCard} flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition`}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <figure className="relative w-12 h-12 rounded overflow-hidden flex-shrink-0">
+                          <Image
+                            src={order.shop?.image || "/images/bar.jpg"}
+                            alt={order.shop?.name || "Shop"}
+                            fill
+                            className="object-cover"
+                          />
+                        </figure>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-lg truncate">
+                            LIQ-{order.id.slice(-6)} - {order.shop?.name || 'Unknown'}
+                          </h3>
+                          <p className="text-sm text-gray-600 truncate">
+                            {getFormattedDateTime(order.created_at)} -{' '}
+                            <span className={`font-medium ${isCompleted ? 'text-green-600' : 'text-primary'}`}>
+                              {getOrderStatus(order.square_status)}
+                            </span>
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <ChevronRight size={22} color="gray" />
-                  </Link>
-                ))}
+                      <ChevronRight size={22} color="gray" />
+                    </Link>
+                  );
+                })}
               </>
             )}
           </div>
         </div>
       </section>
+      <BottomNavigation />
     </>
   );
 }
