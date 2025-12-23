@@ -5,9 +5,7 @@ import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import styles from "./restaurant-cart.module.scss";
-import Header from "@/components/common/Header/Header";
-import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
-import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
+import dynamic from "next/dynamic";
 
 interface CartItem {
   id: string;
@@ -44,7 +42,7 @@ interface Order {
   created_at?: string;
   table_no: string;
   status: string;
-  order_type?: string; // ✅ Added for filtering
+  order_type?: string;
   products: OrderProduct[];
 }
 
@@ -62,27 +60,31 @@ export default function RestaurantCart() {
   const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
 
-  // Load device_id, table info, shop_id, and shop_name from localStorage
+  // ✅ FIXED: Safe localStorage helper
+  const getLocalStorage = (key: string): string => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(key) || "";
+  };
+
+  // ✅ FIXED: Load from localStorage SAFELY
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const storedDevice = getLocalStorage("device_id");
+    const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
+    const storedShop = getLocalStorage("selected_shop");
+    const storedShopParsed = storedShop ? JSON.parse(storedShop) : {};
+    const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
+    const storedShopName = storedShopParsed?.name || "";
 
-    const storedDevice = localStorage.getItem("device_id") || "";
-    const storedTable =
-      localStorage.getItem("table_number") ||
-      localStorage.getItem("table_no") ||
-      "";
-    const storedShop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
-    const storedShopId = storedShop?.id || localStorage.getItem("shop_id") || "";
-    const storedShopName = storedShop?.name || "";
-
-    const storedUserEmail = localStorage.getItem("user_email") || "";
-    const storedUserMobile = localStorage.getItem("user_mobile") || "";
-
-    if (!storedUserEmail) {
-      localStorage.setItem("user_email", "user@liquiditybars.com");
+    // Set default user data
+    if (!getLocalStorage("user_email")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_email", "user@liquiditybars.com");
+      }
     }
-    if (!storedUserMobile) {
-      localStorage.setItem("user_mobile", "+10000000000");
+    if (!getLocalStorage("user_mobile")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_mobile", "+10000000000");
+      }
     }
 
     setDeviceId(storedDevice);
@@ -91,36 +93,28 @@ export default function RestaurantCart() {
     setShopName(storedShopName);
   }, []);
 
-  // ✅ PERFECT FILTERING LOGIC
+  // ✅ FIXED: Safe filtering with localStorage check
   const filterOrdersByTable = useCallback((allOrders: Order[]) => {
-    console.log("🔍 Filtering orders:", { 
+    const hasTableNumber = !!getLocalStorage("table_number");
+    const currentTableNo = getLocalStorage("table_number") || tableNo;
+    
+    console.log("🔍 Filtering:", { 
       allOrders: allOrders.length, 
-      tableNo, 
-      hasTableNumber: !!localStorage.getItem("table_number") 
+      tableNo: currentTableNo, 
+      hasTableNumber 
     });
     
-    const hasTableNumber = !!localStorage.getItem("table_number");
-    
-    if (hasTableNumber && tableNo) {
+    if (hasTableNumber && currentTableNo) {
       // Table mode: table_no MATCH + order_type = "2"
-      const tableOrders = allOrders.filter((order) => {
-        const tableMatch = order.table_no === tableNo;
-        const typeMatch = order.order_type === "2";
-        return tableMatch && typeMatch;
-      });
-      console.log("📋 Table orders (type 2) found:", tableOrders.length);
-      return tableOrders;
+      return allOrders.filter((order) => 
+        order.table_no === currentTableNo && order.order_type === "2"
+      );
     } else {
       // Bar mode: order_type = "1" ONLY
-      const barOrders = allOrders.filter((order) => {
-        return order.order_type === "1";
-      });
-      console.log("📋 Bar orders (type 1) found:", barOrders.length);
-      return barOrders;
+      return allOrders.filter((order) => order.order_type === "1");
     }
   }, [tableNo]);
 
-  // Fetch past orders
   const fetchOrders = useCallback(async () => {
     if (!deviceId) return;
     setLoadingOrders(true);
@@ -129,7 +123,6 @@ export default function RestaurantCart() {
         `https://liquiditybars.com/canada/backend/admin/api/tblOrderList/${deviceId}`
       );
       const data = await res.json();
-      console.log("📡 Raw orders API:", data.orders?.length);
 
       if (data.status === "1") {
         const filteredOrders = (data.orders || [])
@@ -148,13 +141,11 @@ export default function RestaurantCart() {
     }
   }, [deviceId]);
 
-  // Update matched orders
   useEffect(() => {
     const matched = filterOrdersByTable(orders);
     setMatchedOrders(matched);
   }, [orders, tableNo, filterOrdersByTable]);
 
-  // Fetch cart
   const fetchCart = useCallback(async () => {
     if (!deviceId) return;
     setLoading(true);
@@ -180,7 +171,6 @@ export default function RestaurantCart() {
     }
   }, [deviceId]);
 
-  // Remove item
   const removeItem = async (itemId: string) => {
     if (!deviceId || !itemId) return;
     setLoading(true);
@@ -205,12 +195,8 @@ export default function RestaurantCart() {
     }
   };
 
-  // Update quantity
   const updateQuantity = async (itemId: string, newQty: number) => {
-    const item = cartItems.find((i) => i.id === itemId);
-    if (!item) return;
     if (newQty === 0) return removeItem(itemId);
-
     setLoading(true);
     try {
       const formData = new FormData();
@@ -236,7 +222,6 @@ export default function RestaurantCart() {
     }
   };
 
-  // Fetch cart and orders when deviceId ready
   useEffect(() => {
     if (deviceId) {
       fetchCart();
@@ -244,36 +229,30 @@ export default function RestaurantCart() {
     }
   }, [deviceId, fetchCart, fetchOrders]);
 
-  // Calculate totals
   const taxes = cartTotal * 0.13;
   const totalAmount = cartTotal + taxes;
   const finalTotalAmount = totalAmount.toFixed(2);
 
-  // ✅ Order type based on table_number
+  // ✅ FIXED: Safe order type
   const getOrderType = (): string => {
-    const tableNumber = localStorage.getItem("table_number");
-    return tableNumber ? "2" : "1";
+    return getLocalStorage("table_number") ? "2" : "1";
   };
 
   const getUserInfo = () => {
-    const user_name = localStorage.getItem("user_name") || "Guest";
-    const user_email = localStorage.getItem("user_email") || "user@liquiditybars.com";
-    const user_mobile = localStorage.getItem("user_mobile") || "+10000000000";
-    return { user_name, user_email, user_mobile };
+    return {
+      user_name: getLocalStorage("user_name") || "Guest",
+      user_email: getLocalStorage("user_email") || "user@liquiditybars.com",
+      user_mobile: getLocalStorage("user_mobile") || "+10000000000",
+    };
   };
 
-  // ✅ Create order with conditional success page
   const createLiquidityOrder = async () => {
     const { user_name, user_email, user_mobile } = getUserInfo();
-    const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
-    const shop_id = selected_shop?.id || localStorage.getItem("shop_id") || "";
+    const selected_shop = getLocalStorage("selected_shop");
+    const shop_id = selected_shop ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id") : getLocalStorage("shop_id");
 
-    if (!deviceId) {
-      alert("Device ID missing.");
-      return;
-    }
-    if (cartItems.length === 0) {
-      alert("Cart is empty.");
+    if (!deviceId || cartItems.length === 0) {
+      alert("Missing device ID or empty cart.");
       return;
     }
 
@@ -304,7 +283,6 @@ export default function RestaurantCart() {
       const data = await res.json();
       
       if (data.status === 1 || data.status === "1") {
-        // ✅ Conditional navigation
         if (orderType === "1") {
           router.push(`/bar-order-success/${data.order_id}`);
         } else {
@@ -323,31 +301,38 @@ export default function RestaurantCart() {
     await createLiquidityOrder();
   };
 
-  const restaurantLink = `/restaurant/${shopId}?table=${tableNo}`;
+  // ✅ FIXED: Conditional restaurantLink
+const hasTableNumber = !!getLocalStorage("table_number");
+const restaurantLink = hasTableNumber 
+  ? `/restaurant/${shopId}?table=${tableNo}`
+  : `/restaurant/${shopId}`;
 
-  const getLocalStorage = (key: string): string => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem(key) || "";
-  };
+// ✅ FIXED: Conditional handleBack
+const handleBack = () => {
+  const shopId = getLocalStorage("shop_id") || getLocalStorage("restaurant_id");
+  const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
+  
+  if (shopId && tableNo) {
+    router.push(`/restaurant/${shopId}?table=${tableNo}`);
+  } else if (shopId) {
+    router.push(`/restaurant/${shopId}`);
+  } else {
+    router.push("/restaurant");
+  }
+};
 
-  const handleBack = () => {
-    const shopId = getLocalStorage("shop_id") || getLocalStorage("restaurant_id");
-    const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
 
-    if (shopId && tableNo) {
-      router.push(`/restaurant/${shopId}?table=${tableNo}`);
-    } else {
-      router.push(`/restaurant/${shopId}`);
-    }
-  };
-
-  // Dynamic section title
   const getSectionTitle = () => {
-    const hasTableNumber = !!localStorage.getItem("table_number");
-    return hasTableNumber && tableNo 
-      ? `Current tab (Table #${tableNo})` 
+    const hasTableNumber = !!getLocalStorage("table_number");
+    const currentTableNo = getLocalStorage("table_number") || tableNo;
+    return hasTableNumber && currentTableNo 
+      ? `Current tab (Table #${currentTableNo})` 
       : "Current Bar Tab";
   };
+
+  // Import components dynamically to avoid SSR issues
+  const Header = dynamic(() => import("@/components/common/Header/Header"), { ssr: false });
+  const QuantityButton = dynamic(() => import("@/components/common/QuantityButton/QuantityButton"), { ssr: false });
 
   return (
     <>
@@ -414,7 +399,6 @@ export default function RestaurantCart() {
           <div className={styles.billingArea}>
             <h4 className="text-lg font-semibold mb-4">Billing Summary</h4>
 
-            {/* Previous Orders */}
             <h5 className="text-lg font-semibold mb-3">{getSectionTitle()}</h5>
             
             {loadingOrders ? (
@@ -422,8 +406,8 @@ export default function RestaurantCart() {
             ) : matchedOrders.length === 0 ? (
               <div className="p-4 text-center text-gray-400 text-sm">
                 <p className="italic">
-                  {localStorage.getItem("table_number") 
-                    ? `No previous orders for Table #${tableNo}` 
+                  {getLocalStorage("table_number") 
+                    ? `No previous orders for Table #${getLocalStorage("table_number")}` 
                     : "No previous bar orders (type 1)"
                   }
                 </p>
@@ -431,10 +415,10 @@ export default function RestaurantCart() {
             ) : (
               <div className="">
                 {matchedOrders.map((order) => (
-                  <div key={order.id}>
-                    {/* Order Header */}
-                                        
-                    {/* Order Products */}
+                  <div key={order.id} className="">
+
+                    
+
                     
                       {order.products.map((product) => (
                         <div key={product.id} className={`${styles.billingItem}`}>
@@ -457,7 +441,6 @@ export default function RestaurantCart() {
               </div>
             )}
 
-            {/* Current Cart */}
             <h5 className="text-lg font-semibold mb-3">Latest Cart</h5>
             {loading ? (
               <p className="p-2 text-center text-gray-500 text-sm">Loading...</p>
@@ -478,7 +461,6 @@ export default function RestaurantCart() {
               </div>
             )}
 
-            {/* Totals */}
             <div className={styles.billingItem}>
               <p>Taxes & Other Fees</p>
               <p>${taxes.toFixed(2)}</p>
@@ -489,7 +471,6 @@ export default function RestaurantCart() {
             </div>
           </div>
 
-          {/* Checkout */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
               <button
