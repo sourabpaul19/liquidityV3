@@ -9,6 +9,12 @@ const publicRoutes = [
   '/otp-verify',
   '/new-account',
   '/outlet',
+  '/restaurant',
+  '/restaurant-cart',
+  '/table',
+  '/guest',
+  '/my-table',
+  '/table-order-success/',
 ];
 
 export function middleware(request: NextRequest) {

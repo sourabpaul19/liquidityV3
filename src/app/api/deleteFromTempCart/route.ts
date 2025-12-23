@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { id } = await req.json(); // temp_carts.id
+    const { id } = await req.json(); // Expects { id: "item123" }
 
     if (!id) {
       return NextResponse.json(
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const url = `https://liquiditybars.com/canada/backend/admin/api/deleteFromTempCart/${id}`;
 
     const apiRes = await fetch(url, {
-      method: "GET", // or "POST" if your routes are POST, but URL still has /{id}
+      method: "GET",
       headers: {
         Accept: "application/json, text/plain, */*",
       },
