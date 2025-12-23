@@ -115,6 +115,8 @@ body {
   padding: 12px;
   background: #fff;
   border: none;
+  width: 48px;
+  height: 48px;
 }
 .pageTitle {
   font-size: 20px;

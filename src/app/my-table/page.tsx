@@ -17,6 +17,7 @@ interface Order {
   id: string;
   unique_id: string;
   total_amount: string;
+  tax_amount?: string;
   products: OrderProduct[];
 }
 
@@ -81,19 +82,30 @@ export default function MyTable() {
   // Flatten all products from all orders into one array
   const allProducts: OrderProduct[] = orders.flatMap((order) => order.products || []);
 
-  // Grand total across all orders: sum(price * quantity) for every product
-  const grandTotal = allProducts.reduce((sum, product) => {
+  // Grand subtotal across all orders: sum(price * quantity) for every product
+  const grandSubtotal = allProducts.reduce((sum, product) => {
     const lineTotal =
       parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
     return sum + lineTotal;
-  }, 0); // reduce pattern for totals [web:57][web:66]
+  }, 0);
+
+  // Sum all tax_amount from orders (API field) or calculate 13% of subtotal
+  const grandTax = orders.reduce((sum, order) => {
+    if (order.tax_amount) {
+      return sum + parseFloat(order.tax_amount || "0");
+    }
+    // Fallback: 13% tax rate if no tax_amount provided
+    return sum + grandSubtotal * 0.13;
+  }, 0);
+
+  // Grand total = subtotal + tax
+  const grandTotal = grandSubtotal + grandTax;
 
   const renderBody = () => {
     if (loading) {
       return (
         <div className="pageContainer py-4">
           <div className={styles.billCard}>
-            <h4 className={styles.sectionTitle}>Items</h4>
             <p className="text-sm text-gray-500 text-center">Loading...</p>
           </div>
         </div>
@@ -154,10 +166,22 @@ export default function MyTable() {
             );
           })}
 
-          {/* Grand subtotal for all orders */}
+          {/* Tax row */}
+          <div className={styles.billingItem}>
+            <p className={styles.subtotalLabel}>Taxes &amp; Other Fees</p>
+            <p className={styles.subtotalValue}>${grandTax.toFixed(2)}</p>
+          </div>
+
+          {/* Subtotal row */}
           <div className={styles.billingItem}>
             <h4 className={styles.subtotalLabel}>Subtotal</h4>
-            <h4 className={styles.subtotalValue}>${grandTotal.toFixed(2)}</h4>
+            <h4 className={styles.subtotalValue}>${grandSubtotal.toFixed(2)}</h4>
+          </div>
+
+          {/* TOTAL row - NEW & MOST PROMINENT */}
+          <div className={styles.billingItem}>
+            <h4 className={styles.totalLabel}>Total</h4>
+            <h4 className={styles.totalValue}>${grandTotal.toFixed(2)}</h4>
           </div>
 
           {/* Primary CTA */}

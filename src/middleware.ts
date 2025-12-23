@@ -15,6 +15,9 @@ const publicRoutes = [
   '/guest',
   '/my-table',
   '/table-order-success/',
+  '/bar-guest/',
+  '/bar-order/',
+  '/bar-order-details/',
 ];
 
 export function middleware(request: NextRequest) {

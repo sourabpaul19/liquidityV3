@@ -6,8 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
-import styles from "../table-order-success.module.scss";
-import statusImg from "../../../../public/images/cheers.png";
+import styles from "../bar-order-success.module.scss";
+import statusImg from "../../../../public/images/bar-status.png";
 
 // -----------------------------------------
 // TYPES
@@ -98,13 +98,14 @@ export default function OrderSuccess() {
     router.push(`/restaurant/${shopId}?table=${tableNo}`);
   }, [router, clearPolling, getLocalStorageValues]);
 
+  // ✅ FIXED: Stable dependencies
   const handleViewTab = useCallback(() => {
     clearPolling();
-    router.push("/my-table");
-  }, [router, clearPolling]);
+    router.push(`/bar-order-details/${id}`);
+  }, [router, clearPolling, id]);
 
   // -----------------------------
-  // API HELPERS
+  // API HELPERS - STABLE DEPENDENCIES
   // -----------------------------
   const fetchOrderDetails = useCallback(async (): Promise<Order | null> => {
     try {
@@ -129,7 +130,7 @@ export default function OrderSuccess() {
       console.error("orderDetails error", e);
       return null;
     }
-  }, [id]);
+  }, [id]); // ✅ Only id dependency
 
   const fetchSquareStatus = useCallback(
     async (squareOrderId: string): Promise<SquareStatus> => {
@@ -159,11 +160,11 @@ export default function OrderSuccess() {
         return null;
       }
     },
-    []
+    [] // ✅ No dependencies - stable function
   );
 
   // -----------------------------
-  // EFFECT: INITIAL LOAD + POLLING
+  // ✅ FIXED: Stable useEffect dependencies
   // -----------------------------
   useEffect(() => {
     if (!id) return;
@@ -206,7 +207,6 @@ export default function OrderSuccess() {
       } else if (sq === "COMPLETED") {
         const updated = { ...orderData, status: "2", is_ready: "1" };
         setOrder(updated);
-        // ✅ Stay on page - show "Your Order Has Been Collected" message
         clearPolling(); // Stop polling when completed
       }
 
@@ -224,7 +224,7 @@ export default function OrderSuccess() {
       mounted = false;
       clearPolling();
     };
-  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling, router]);
+  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling]); // ✅ Stable dependencies only
 
   // -----------------------------
   // RENDER
@@ -275,7 +275,7 @@ export default function OrderSuccess() {
               onClick={handleOrderAnother}
               className="mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
-              Order Another Item
+              Order Again
             </button>
 
             <button 
@@ -283,7 +283,7 @@ export default function OrderSuccess() {
               onClick={handleViewTab}
               className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-gray-600 hover:bg-gray-700 transition-all hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
-              View Tab
+              Receipt
             </button>
           </div>
         </div>

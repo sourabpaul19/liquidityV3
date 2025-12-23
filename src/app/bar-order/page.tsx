@@ -2,9 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import Link from "next/link";
-import styles from "./table.module.scss";
+import Image from 'next/image';
+import styles from "./bar-order.module.scss";
 
 interface Shop {
   id: string;
@@ -16,12 +16,10 @@ interface Shop {
 export default function TablePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [eventCode, setEventCode] = useState('');
   const [shopName, setShopName] = useState('Liquidity Bars');
   const [shopDetails, setShopDetails] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
   const shopId = searchParams.get('shop') || '';
-  const [tableNo, setTableNo] = useState<string>("");
 
   // Canvas fingerprint
   const getCanvasFingerprint = async (): Promise<string> => {
@@ -65,7 +63,7 @@ export default function TablePage() {
     return sha256(JSON.stringify(signals));
   };
 
-  // Initialize device ID on mount
+  // Initialize device ID on mount + CLEAR table_number for bar flow
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -79,6 +77,11 @@ export default function TablePage() {
       } else {
         console.log("✅ EXISTING STABLE Device ID:", deviceId);
       }
+
+      // ✅ BAR FLOW: Clear table_number (table-based flow → bar/guest flow)
+      localStorage.removeItem("table_number");
+      localStorage.removeItem("table_no");
+      console.log("🧹 CLEARED table_number/table_no for bar flow");
     };
 
     void initDeviceId();
@@ -92,11 +95,11 @@ export default function TablePage() {
         const data = await response.json();
         
         if (data.status === '1' && data.shops) {
-          const shop = data.shops.find((s: Shop) => s.id === shopId);
-          if (shop) {
-            setShopDetails(shop);
-            setShopName(shop.name);
-          }
+         const shop = data.shops.find((s: Shop) => s.id === shopId);
+         if (shop) {
+           setShopDetails(shop);
+           setShopName(shop.name);
+         }
         }
       } catch (error) {
         console.error('Failed to fetch shop data:', error);
@@ -112,47 +115,23 @@ export default function TablePage() {
     }
   }, [shopId]);
 
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    const tableNumber = eventCode.trim();
-    
-    if (tableNumber) {
-      // Store in localStorage
-      localStorage.setItem('shop_id', shopId);
-      localStorage.setItem('table_number', tableNumber);
-      
-      // Navigate to login with params
-      router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
-    }
-  };
-
   const handleGuestProceed = () => {
-    const tableNumber = eventCode.trim();
+    // ✅ Store shop_id only (NO table_number needed)
+    localStorage.setItem('shop_id', shopId);
     
-    if (tableNumber) {
-      // Store in localStorage
-      localStorage.setItem('shop_id', shopId);
-      localStorage.setItem('table_number', tableNumber);
-      
-      // Navigate to name with params
-      router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
-    } else {
-      alert('Please enter table number first');
-    }
+    // Navigate to guest page WITHOUT table parameter
+    router.push(`/bar-guest?shop=${shopId}`);
   };
 
   const handleLogin = () => {
     router.push(`/choose`);
   };
 
-  const barlink = `/bar-order?shop=${shopId}`;
-
-
   if (loading) {
     return (
       <div className={styles.welcome_wrapper}>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       </div>
     );
@@ -174,49 +153,33 @@ export default function TablePage() {
       )}
 
       <p className="text-lg text-center mb-8 leading-relaxed">
-        Please enter your table number, and<br/>
-        <span className="font-semibold">sign in</span> or <span className="font-semibold">proceed as a guest</span>
-      </p>
+        Please <span className="font-semibold">sign in</span> or <span className="font-semibold">proceed as a guest</span>
+      </p>       
 
-      {/* Table Input Form */}
-      <form onSubmit={handleVerify} className={`${styles.welcomeForm} mb-3`}>
-        <input
-          type="text"
-          value={eventCode}
-          onChange={(e) => setEventCode(e.target.value)}
-          className={`${styles.textbox} rounded-lg`}
-          placeholder="Enter your table number"
-          autoFocus
-        />
-        
-        {/* Sign In Button */}
-        <button type="submit" style={{ display: "none" }}>Submit</button>
-      </form>
-
-      
-
-      {/* Guest Button */}
+      {/* Buttons */}
       <div className={styles.welcomeForm}>
         <button 
           onClick={handleLogin}
           className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center mt-3"
-          disabled={!eventCode.trim()}
         >
           Sign Up / Sign In
         </button>
 
-      <p className="text-center text-lg font-semibold text-gray-600 mb-3">or</p>
+        <p className="text-center text-lg font-semibold text-gray-600 mb-3">or</p>
+        
         <button
           onClick={handleGuestProceed}
-          disabled={!eventCode.trim()}
-          className="bg-primary px-3 py-3 rounded-lg w-full text-white hover:from-blue-700 hover:to-primary-dark transition-all transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-primary px-3 py-3 rounded-lg w-full text-white hover:from-blue-700 hover:to-primary-dark transition-all transform hover:-translate-y-1"
         >
           Proceed as Guest
         </button>
       </div>
 
+      {/* ✅ FIXED: Dynamic table link with shopId */}
       <div className={styles.otpFooter}>
-        <p className="text-center"><Link href={barlink}>Ordering at the bar ?</Link></p>
+        <p className="text-center">
+          <Link href={`/table?shop=${shopId}`}>Ordering at the table?</Link>
+        </p>
       </div>
     </div>
   );

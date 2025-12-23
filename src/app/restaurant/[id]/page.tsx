@@ -494,7 +494,11 @@ export default function Restaurant() {
 
   return (
     <>
-      <Header title="Menu" />
+      <header className="header">
+        <button type="button" className="icon_only"></button>
+        <div className="pageTitle">Menu</div>
+        <button type="button" className="icon_only"></button>
+      </header>
 
       <section className="pageWrapper hasHeader hasMenu">
         {/* Category bar */}
