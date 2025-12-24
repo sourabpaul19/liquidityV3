@@ -21,6 +21,7 @@ const publicRoutes = [
   '/bar-order-details',
   '/order-choose',
   '/order-login',
+  '/order-otp-verify',
 ];
 
 export function middleware(request: NextRequest) {

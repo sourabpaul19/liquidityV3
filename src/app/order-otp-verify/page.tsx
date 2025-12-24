@@ -114,7 +114,7 @@ export default function OTPVerify() {
       if (profileIncomplete) {
         // NEW USER: Complete profile first
         console.log("🆕 NEW USER → /new-account");
-        router.push("/new-account");
+        router.push("/order-new-account");
       } else {
         // RETURNING USER: Smart restaurant flow
         if (typeof window !== "undefined") {
