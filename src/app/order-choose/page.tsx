@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useEffect } from "react";
-import Image from "next/image";
-import logo from "../../../public/images/logo.png";
 import styles from "./order-choose.module.scss";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,15 +8,26 @@ import { useRouter } from "next/navigation";
 export default function Choose() {
   const router = useRouter();
 
-  // Check login status on page load
+  // Check login + routing on page load
   useEffect(() => {
-    const isLoggedIn =
-      typeof window !== "undefined"
-        ? localStorage.getItem("isLoggedIn") === "true"
-        : false;
+    if (typeof window === "undefined") return;
 
-    if (isLoggedIn) {
-      router.replace("/my-table"); // logged in → go to home
+    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+    if (!isLoggedIn) return;
+
+    const shopId = localStorage.getItem("shop_id");
+    const tableNumber = localStorage.getItem("table_number");
+    const orderType = localStorage.getItem("order_type");
+
+    if (shopId && tableNumber) {
+      // ex: /restaurant/33?table=4
+      router.replace(`/restaurant/${shopId}?table=${tableNumber}`);
+    } else if (shopId && orderType === "bar") {
+      // ex: /restaurant/33
+      router.replace(`/restaurant/${shopId}`);
+    } else {
+      // default logged‑in route
+      router.replace("/my-table");
     }
   }, [router]);
 
