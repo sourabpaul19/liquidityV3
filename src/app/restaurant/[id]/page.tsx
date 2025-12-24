@@ -13,7 +13,7 @@ import {
   useSearchParams,
 } from "next/navigation";
 import Image from "next/image";
-import { Plus, Trash2 } from "lucide-react";
+import { LogOut, Plus, Trash2, AlertTriangle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import styles from "../outlet.module.scss";
@@ -83,6 +83,8 @@ export default function Restaurant() {
   const [tableNumber, setTableNumber] = useState<string>("");
   const [deviceId, setDeviceId] = useState("");
   const [userId, setUserId] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   // Menu state
   const [categories, setCategories] = useState<Category[]>([]);
@@ -110,12 +112,13 @@ export default function Restaurant() {
   const [tempSelectedMixer, setTempSelectedMixer] = useState<MenuItem | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [showBillWarning, setShowBillWarning] = useState(false);
-
+  
+  // Logout modal state
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Refs
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
 
   // ---------- CART NORMALIZER ----------
   const normalizeCartItem = useCallback((row: any): CartItem => {
@@ -141,7 +144,45 @@ export default function Restaurant() {
     };
   }, [mixers]);
 
-  // ---------- FETCH CART (no table_number) ----------
+  // ---------- LOGOUT FUNCTIONS ----------
+  const handleLogoutConfirm = () => {
+    setShowLogoutModal(false);
+    
+    // Check order_type before logout
+    const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
+    const hasBarOrder = orderType === 'bar';
+    
+    // Clear all storage
+    if (typeof window !== "undefined") {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
+    
+    // Clear cart state
+    setCartItems([]);
+    setCartTotal(0);
+    setCartCount(0);
+    setUserId("");
+    setIsLoggedIn(false);
+    
+    toast.success('Logged out successfully', {
+      duration: 3000,
+      position: 'top-right'
+    });
+    
+    // Redirect based on order_type
+    const redirectUrl = hasBarOrder 
+      ? `http://localhost:3000/bar-order?shop=${shopId}`
+      : `http://localhost:3000/table?shop=${shopId}`;
+    
+    window.location.href = redirectUrl;
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
+  };
+
+  // ---------- FETCH CART ----------
   const fetchCart = useCallback(async (signal?: AbortSignal) => {
     console.log("🚀 fetchCart START", { deviceId, userId });
 
@@ -193,21 +234,27 @@ export default function Restaurant() {
     }
   }, [deviceId, userId, normalizeCartItem]);
 
+  // ---------- CHECK LOGIN STATUS ----------
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-  // useEffect(() => {
-  //   if (typeof window === "undefined") return;
+  useEffect(() => {
+    if (!isClient) return;
 
-  //   const hasSeen = localStorage.getItem("has_seen_bill_warning");
-  //   if (!hasSeen) {
-  //     setShowBillWarning(true);
-  //     localStorage.setItem("has_seen_bill_warning", "1");
-  //   }
-  // }, []);
+    const isLoggedInStorage = localStorage.getItem('isLoggedIn');
+    const userIdStorage = localStorage.getItem('user_id');
+    
+    const loggedIn = isLoggedInStorage === 'true' && !!userIdStorage;
+    setIsLoggedIn(loggedIn);
+    setUserId(userIdStorage || "");
+    
+    console.log("🔐 LOGIN STATUS:", loggedIn ? "LOGGED IN" : "GUEST");
+  }, [isClient]);
 
   useEffect(() => {
     setShowBillWarning(true);
   }, []);
-
 
   // ---------- INITIALIZE IDS + TABLE ----------
   useEffect(() => {
@@ -232,11 +279,64 @@ export default function Restaurant() {
     }
     setDeviceId(storedDevice);
     console.log("🆔 DEVICE_ID SET:", storedDevice.slice(0, 12) + "...");
-
-    const uid = localStorage.getItem("user_id") || "";
-    setUserId(uid);
-    console.log("👤 USER_ID:", uid ? uid.slice(0, 8) + "..." : "EMPTY");
   }, [initialTable]);
+
+  // ---------- SHOP VALIDATION ON LOAD ----------
+  useEffect(() => {
+    if (typeof window === "undefined" || !deviceId) return;
+
+    const validateShop = async () => {
+      try {
+        const cartShopId = localStorage.getItem("cart_shop_id");
+        
+        // If no cart_shop_id, nothing to do
+        if (!cartShopId) {
+          console.log("✅ No cart_shop_id found - skipping validation");
+          return;
+        }
+
+        // If same shop, nothing to do
+        if (cartShopId === shopId) {
+          console.log("✅ cart_shop_id matches current shop - nothing to do");
+          return;
+        }
+
+        // Different shop - clear cart via API
+        console.log("🧹 Different shop detected - clearing cart");
+        console.log("Current shop:", shopId, "Cart shop:", cartShopId);
+
+        const res = await fetch(
+          `https://liquiditybars.com/canada/backend/admin/api/clearTempCart/${deviceId}`,
+          { method: "POST" }
+        );
+
+        if (res.ok) {
+          console.log("✅ Cart cleared successfully via API");
+          localStorage.removeItem("cart_shop_id");
+          setCartItems([]);
+          setCartTotal(0);
+          setCartCount(0);
+          toast.success("Cart cleared - now shopping from current store");
+        } else {
+          console.error("💥 Failed to clear cart via API");
+          // Fallback: clear local storage anyway
+          localStorage.removeItem("cart_shop_id");
+          setCartItems([]);
+          setCartTotal(0);
+          setCartCount(0);
+        }
+      } catch (error) {
+        console.error("💥 Shop validation error:", error);
+        // Fallback cleanup
+        localStorage.removeItem("cart_shop_id");
+        setCartItems([]);
+        setCartTotal(0);
+        setCartCount(0);
+      }
+    };
+
+    validateShop();
+  }, [deviceId, shopId]);
 
   // ---------- AUTO FETCH CART ----------
   useEffect(() => {
@@ -376,7 +476,7 @@ export default function Restaurant() {
     await addToCart(item, qty);
   };
 
-  // ---------- ADD TO CART (payload = screenshot) ----------
+  // ---------- ADD TO CART ----------
   const addToCart = async (item: MenuItem, qty: number) => {
     if (qty <= 0) {
       toast.error("Please choose a quantity");
@@ -401,7 +501,7 @@ export default function Restaurant() {
         user_id: userIdLocal,
         cartProductIds: String(item.id),
         cartProductsNames: item.name,
-        cartProductPrices: linePrice.toString(), // backend expects plain number like "8"
+        cartProductPrices: linePrice.toString(),
         cartQuantities: String(qty),
         cartIsLiquors: item.is_double_shot ? "1" : "0",
         units: "1oz",
@@ -489,15 +589,33 @@ export default function Restaurant() {
     cartCount,
     deviceId: deviceId ? deviceId.slice(0, 8) + "..." : "EMPTY",
     userId: userId ? userId.slice(0, 8) + "..." : "EMPTY",
+    isLoggedIn,
     tableNumber,
   });
+
+  if (!isClient) {
+    return <div className="text-center py-10">Loading...</div>;
+  }
 
   return (
     <>
       <header className="header">
         <button type="button" className="icon_only"></button>
         <div className="pageTitle">Menu</div>
-        <button type="button" className="icon_only"></button>
+        {isLoggedIn ? (
+          <button 
+            type="button" 
+            className="icon_only"
+            onClick={() => setShowLogoutModal(true)}
+            title="Log out"
+          >
+            <LogOut size={20} />
+          </button>
+        ) : (
+          <button type="button" className="icon_only opacity-0 cursor-not-allowed" title="Log in required">
+            <LogOut size={20} />
+          </button>
+        )}
       </header>
 
       <section className="pageWrapper hasHeader hasMenu">
@@ -564,19 +682,6 @@ export default function Restaurant() {
             </div>
           ))}
         </div>
-
-        {/* Debug panel */}
-        {/* <div className="fixed top-20 left-4 bg-blue-500 text-white p-3 rounded z-50 text-xs max-w-72 shadow-lg">
-          <pre>{JSON.stringify({
-            deviceId: deviceId.slice(0,8)+'...',
-            userId: userId ? userId.slice(0,8)+'...' : 'EMPTY',
-            table: tableNumber,
-            loaded: cartLoaded,
-            count: cartCount,
-            items: cartItems.length,
-            mixers: mixers.length
-          }, null, 2)}</pre>
-        </div> */}
 
         {/* Sticky cart */}
         {cartLoaded && cartCount > 0 && (
@@ -671,7 +776,6 @@ export default function Restaurant() {
         </Modal>
       )}
 
-
       {/* Bill splitting warning modal */}
       <Modal
         isOpen={showBillWarning}
@@ -694,7 +798,6 @@ export default function Restaurant() {
           </button>
         </div>
       </Modal>
-
 
       {/* Mixer selection modal */}
       <Modal
@@ -750,6 +853,50 @@ export default function Restaurant() {
           </button>
         </div>
       </Modal>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" 
+            onClick={handleLogoutCancel}
+          >
+            <div 
+              className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Log Out?</h3>
+                  <p className="text-sm text-gray-500">
+                    This will clear your cart and log you out. You will need to log in again.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleLogoutCancel}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <X size={18} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLogoutConfirm}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <LogOut size={18} />
+                  Log Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

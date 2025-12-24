@@ -18,6 +18,10 @@ interface Order {
   unique_id: string;
   total_amount: string;
   tax_amount?: string;
+  order_date: string;
+  shop_id?: string;
+  table_no: string;
+  order_type?: string;
   products: OrderProduct[];
 }
 
@@ -26,32 +30,79 @@ const getLocalStorage = (key: string): string => {
   return localStorage.getItem(key) || "";
 };
 
+// ✅ Get current shop ID helper
+const getShopId = (): string => {
+  const selected_shop = getLocalStorage("selected_shop");
+  return selected_shop
+    ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id")
+    : getLocalStorage("shop_id");
+};
+
+// ✅ Get today's date in YYYY-MM-DD format
+const getTodayDate = (): string => {
+  return new Date().toISOString().split("T")[0];
+};
+
 export default function MyTable() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
 
   const handleBack = () => {
     router.back();
   };
 
   const handleOrderAnother = () => {
-    const shopId = getLocalStorage("shop_id") || getLocalStorage("restaurant_id");
+    const shopId = getShopId();
     const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
 
     if (shopId && tableNo) {
       router.push(`/restaurant/${shopId}?table=${tableNo}`);
+    } else if (shopId) {
+      router.push(`/restaurant/${shopId}`);
     } else {
       router.push("/restaurant");
     }
+  };
+
+  // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
+  const filterOrders = (allOrders: Order[]): Order[] => {
+    const hasTableNumber = !!getLocalStorage("table_number");
+    const currentTableNo = getLocalStorage("table_number") || "";
+    const currentShopId = getShopId();
+    const todayDate = getTodayDate();
+
+    console.log("🔍 MyTable Filtering:", { 
+      allOrders: allOrders.length, 
+      tableNo: currentTableNo, 
+      hasTableNumber,
+      currentShopId,
+      todayDate
+    });
+
+    return allOrders.filter((order) => {
+      // ✅ Must match today's date ONLY
+      if (order.order_date !== todayDate) return false;
+
+      // ✅ Must match shop_id
+      if (currentShopId && order.shop_id !== currentShopId) return false;
+
+      if (hasTableNumber && currentTableNo) {
+        // Table mode: table_no MATCH + order_type = "2"
+        return order.table_no === currentTableNo && order.order_type === "2";
+      } else {
+        // Bar mode: order_type = "1" ONLY
+        return order.order_type === "1";
+      }
+    });
   };
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         setLoading(true);
-        const deviceId =
-          getLocalStorage("device_id") || getLocalStorage("deviceId");
+        const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
 
         if (!deviceId) {
           setLoading(false);
@@ -68,7 +119,12 @@ export default function MyTable() {
 
         const data = await res.json();
         const list: Order[] = Array.isArray(data) ? data : data.orders || [];
-        setOrders(list);
+        
+        // Initial filter
+        const filteredList = list.filter((order: Order) => 
+          order.products && order.products.length > 0
+        );
+        setOrders(filteredList);
       } catch (e) {
         console.error(e);
       } finally {
@@ -79,18 +135,23 @@ export default function MyTable() {
     fetchOrders();
   }, []);
 
-  // Flatten all products from all orders into one array
-  const allProducts: OrderProduct[] = orders.flatMap((order) => order.products || []);
+  // ✅ Filter orders whenever orders or localStorage changes
+  useEffect(() => {
+    const filtered = filterOrders(orders);
+    setFilteredOrders(filtered);
+  }, [orders]);
 
-  // Grand subtotal across all orders: sum(price * quantity) for every product
+  // Flatten all products from FILTERED orders only
+  const allProducts: OrderProduct[] = filteredOrders.flatMap((order) => order.products || []);
+
+  // Grand subtotal across FILTERED orders: sum(price * quantity) for every product
   const grandSubtotal = allProducts.reduce((sum, product) => {
-    const lineTotal =
-      parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
+    const lineTotal = parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
     return sum + lineTotal;
   }, 0);
 
-  // Sum all tax_amount from orders (API field) or calculate 13% of subtotal
-  const grandTax = orders.reduce((sum, order) => {
+  // Sum all tax_amount from FILTERED orders (API field) or calculate 13% of subtotal
+  const grandTax = filteredOrders.reduce((sum, order) => {
     if (order.tax_amount) {
       return sum + parseFloat(order.tax_amount || "0");
     }
@@ -118,7 +179,10 @@ export default function MyTable() {
           <div className={styles.billCard}>
             <h4 className={styles.sectionTitle}>Items</h4>
             <p className="text-sm text-gray-400 italic">
-              No items on this tab yet
+              {getLocalStorage("table_number") 
+                ? `No items on Table #${getLocalStorage("table_number")} tab today`
+                : "No items on this bar tab today"
+              }
             </p>
 
             <div className={styles.subtotalRow}>
@@ -149,16 +213,15 @@ export default function MyTable() {
           {/* Items heading */}
           <h4 className={styles.sectionTitle}>Items</h4>
 
-          {/* Every product from every order */}
+          {/* Every product from every FILTERED order */}
           {allProducts.map((product) => {
-            const lineTotal =
-              parseFloat(product.price || "0") *
-              parseFloat(product.quantity || "0");
+            const lineTotal = parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
 
             return (
               <div key={product.id + product.product_name} className={styles.billingItem}>
                 <p className={styles.itemName}>
                   {product.product_name}
+                  {product.unit && ` (${product.unit})`}
                   {parseInt(product.quantity) > 1 && ` x${product.quantity}`}
                 </p>
                 <p className={styles.itemPrice}>${lineTotal.toFixed(2)}</p>

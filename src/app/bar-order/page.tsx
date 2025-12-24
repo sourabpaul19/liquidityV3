@@ -63,11 +63,11 @@ export default function TablePage() {
     return sha256(JSON.stringify(signals));
   };
 
-  // Initialize device ID on mount + CLEAR table_number for bar flow
+  // ✅ FIXED: Initialize device ID + STORE shop_id + CLEAR table_number + SET order_type="bar"
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const initDeviceId = async () => {
+    const initDeviceIdAndShop = async () => {
       let deviceId = localStorage.getItem("device_id");
       if (!deviceId) {
         console.log("🔄 Generating stable device fingerprint...");
@@ -78,14 +78,24 @@ export default function TablePage() {
         console.log("✅ EXISTING STABLE Device ID:", deviceId);
       }
 
+      // ✅ FIXED: Store shop_id IMMEDIATELY when page loads
+      if (shopId) {
+        localStorage.setItem("shop_id", shopId);
+        console.log("✅ STORING shop_id:", shopId);
+      }
+
       // ✅ BAR FLOW: Clear table_number (table-based flow → bar/guest flow)
       localStorage.removeItem("table_number");
       localStorage.removeItem("table_no");
-      console.log("🧹 CLEARED table_number/table_no for bar flow");
+      
+      // ✅ NEW: Set order_type = "bar" for bar flow
+      localStorage.setItem("order_type", "bar");
+      
+      console.log("🧹 CLEARED table_number/table_no + SET order_type=bar for bar flow");
     };
 
-    void initDeviceId();
-  }, []);
+    void initDeviceIdAndShop();
+  }, [shopId]); // ✅ DEPENDENCY: Runs when shopId is available
 
   // Fetch shop details from API
   useEffect(() => {
@@ -124,7 +134,7 @@ export default function TablePage() {
   };
 
   const handleLogin = () => {
-    router.push(`/choose`);
+    router.push(`/order-choose`);
   };
 
   if (loading) {

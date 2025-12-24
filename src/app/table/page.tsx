@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import Link from "next/link";
 import styles from "./table.module.scss";
 
@@ -16,12 +15,13 @@ interface Shop {
 export default function TablePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [eventCode, setEventCode] = useState('');
   const [shopName, setShopName] = useState('Liquidity Bars');
   const [shopDetails, setShopDetails] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
+
   const shopId = searchParams.get('shop') || '';
-  const [tableNo, setTableNo] = useState<string>("");
 
   // Canvas fingerprint
   const getCanvasFingerprint = async (): Promise<string> => {
@@ -65,6 +65,15 @@ export default function TablePage() {
     return sha256(JSON.stringify(signals));
   };
 
+  // Store shopId in localStorage on page load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (shopId) {
+      localStorage.setItem('shop_id', shopId);
+    }
+  }, [shopId]);
+
   // Initialize device ID on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -72,25 +81,34 @@ export default function TablePage() {
     const initDeviceId = async () => {
       let deviceId = localStorage.getItem("device_id");
       if (!deviceId) {
-        console.log("🔄 Generating stable device fingerprint...");
         deviceId = await generateStableDeviceId();
         localStorage.setItem("device_id", deviceId);
-        console.log("✅ NEW STABLE Device ID:", deviceId);
-      } else {
-        console.log("✅ EXISTING STABLE Device ID:", deviceId);
       }
     };
 
     void initDeviceId();
   }, []);
 
+  // Clear order_type=bar on load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const orderType = localStorage.getItem("order_type");
+    if (orderType === "bar") {
+      localStorage.removeItem("order_type");
+      console.log("Removed order_type from localStorage");
+    }
+  }, []); // runs once on mount[web:39][web:36]
+
   // Fetch shop details from API
   useEffect(() => {
     const fetchShopData = async () => {
       try {
-        const response = await fetch('https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers');
+        const response = await fetch(
+          'https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers'
+        );
         const data = await response.json();
-        
+
         if (data.status === '1' && data.shops) {
           const shop = data.shops.find((s: Shop) => s.id === shopId);
           if (shop) {
@@ -112,41 +130,32 @@ export default function TablePage() {
     }
   }, [shopId]);
 
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Shared handler for table verification + auth route
+  const handleVerify = () => {
     const tableNumber = eventCode.trim();
-    
+
     if (tableNumber) {
-      // Store in localStorage
       localStorage.setItem('shop_id', shopId);
       localStorage.setItem('table_number', tableNumber);
-      
-      // Navigate to login with params
-      router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
+      //router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
+      router.push(`/order-choose`);
     }
   };
 
+  // Guest proceed handler
   const handleGuestProceed = () => {
     const tableNumber = eventCode.trim();
-    
+
     if (tableNumber) {
-      // Store in localStorage
       localStorage.setItem('shop_id', shopId);
       localStorage.setItem('table_number', tableNumber);
-      
-      // Navigate to name with params
       router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
     } else {
       alert('Please enter table number first');
     }
   };
 
-  const handleLogin = () => {
-    router.push(`/choose`);
-  };
-
   const barlink = `/bar-order?shop=${shopId}`;
-
 
   if (loading) {
     return (
@@ -174,12 +183,18 @@ export default function TablePage() {
       )}
 
       <p className="text-lg text-center mb-8 leading-relaxed">
-        Please enter your table number, and<br/>
+        Please enter your table number, and<br />
         <span className="font-semibold">sign in</span> or <span className="font-semibold">proceed as a guest</span>
       </p>
 
       {/* Table Input Form */}
-      <form onSubmit={handleVerify} className={`${styles.welcomeForm} mb-3`}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleVerify();           // Enter key triggers same logic
+        }}
+        className={`${styles.welcomeForm} mb-3`}
+      >
         <input
           type="text"
           value={eventCode}
@@ -188,24 +203,20 @@ export default function TablePage() {
           placeholder="Enter your table number"
           autoFocus
         />
-        
-        {/* Sign In Button */}
-        <button type="submit" style={{ display: "none" }}>Submit</button>
       </form>
 
-      
-
-      {/* Guest Button */}
+      {/* Auth / Guest Buttons */}
       <div className={styles.welcomeForm}>
-        <button 
-          onClick={handleLogin}
+        <button
+          onClick={handleVerify}    // Same handler as form submit
           className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center mt-3"
           disabled={!eventCode.trim()}
         >
           Sign Up / Sign In
         </button>
 
-      <p className="text-center text-lg font-semibold text-gray-600 mb-3">or</p>
+        <p className="text-center text-lg font-semibold text-gray-600 mb-3">or</p>
+
         <button
           onClick={handleGuestProceed}
           disabled={!eventCode.trim()}
@@ -216,7 +227,9 @@ export default function TablePage() {
       </div>
 
       <div className={styles.otpFooter}>
-        <p className="text-center"><Link href={barlink}>Ordering at the bar ?</Link></p>
+        <p className="text-center">
+          <Link href={barlink}>Ordering at the bar ?</Link>
+        </p>
       </div>
     </div>
   );

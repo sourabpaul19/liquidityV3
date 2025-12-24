@@ -43,6 +43,7 @@ interface Order {
   table_no: string;
   status: string;
   order_type?: string;
+  shop_id?: string;
   products: OrderProduct[];
 }
 
@@ -60,13 +61,26 @@ export default function RestaurantCart() {
   const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
 
-  // ✅ FIXED: Safe localStorage helper
+  // ✅ Safe localStorage helper
   const getLocalStorage = (key: string): string => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(key) || "";
   };
 
-  // ✅ FIXED: Load from localStorage SAFELY
+  // ✅ Get current shop ID helper
+  const getShopId = (): string => {
+    const selected_shop = getLocalStorage("selected_shop");
+    return selected_shop
+      ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id")
+      : getLocalStorage("shop_id");
+  };
+
+  // ✅ Get today's date in YYYY-MM-DD format
+  const getTodayDate = (): string => {
+    return new Date().toISOString().split("T")[0];
+  };
+
+  // ✅ Load from localStorage SAFELY
   useEffect(() => {
     const storedDevice = getLocalStorage("device_id");
     const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
@@ -93,26 +107,36 @@ export default function RestaurantCart() {
     setShopName(storedShopName);
   }, []);
 
-  // ✅ FIXED: Safe filtering with localStorage check
+  // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
   const filterOrdersByTable = useCallback((allOrders: Order[]) => {
     const hasTableNumber = !!getLocalStorage("table_number");
     const currentTableNo = getLocalStorage("table_number") || tableNo;
-    
+    const currentShopId = getShopId();
+    const todayDate = getTodayDate();
+
     console.log("🔍 Filtering:", { 
       allOrders: allOrders.length, 
       tableNo: currentTableNo, 
-      hasTableNumber 
+      hasTableNumber,
+      currentShopId,
+      todayDate
     });
-    
-    if (hasTableNumber && currentTableNo) {
-      // Table mode: table_no MATCH + order_type = "2"
-      return allOrders.filter((order) => 
-        order.table_no === currentTableNo && order.order_type === "2"
-      );
-    } else {
-      // Bar mode: order_type = "1" ONLY
-      return allOrders.filter((order) => order.order_type === "1");
-    }
+
+    return allOrders.filter((order) => {
+      // ✅ Must match today's date ONLY
+      if (order.order_date !== todayDate) return false;
+
+      // ✅ Must match shop_id
+      if (currentShopId && order.shop_id !== currentShopId) return false;
+
+      if (hasTableNumber && currentTableNo) {
+        // Table mode: table_no MATCH + order_type = "2"
+        return order.table_no === currentTableNo && order.order_type === "2";
+      } else {
+        // Bar mode: order_type = "1" ONLY
+        return order.order_type === "1";
+      }
+    });
   }, [tableNo]);
 
   const fetchOrders = useCallback(async () => {
@@ -233,7 +257,6 @@ export default function RestaurantCart() {
   const totalAmount = cartTotal + taxes;
   const finalTotalAmount = totalAmount.toFixed(2);
 
-  // ✅ FIXED: Safe order type
   const getOrderType = (): string => {
     return getLocalStorage("table_number") ? "2" : "1";
   };
@@ -248,8 +271,7 @@ export default function RestaurantCart() {
 
   const createLiquidityOrder = async () => {
     const { user_name, user_email, user_mobile } = getUserInfo();
-    const selected_shop = getLocalStorage("selected_shop");
-    const shop_id = selected_shop ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id") : getLocalStorage("shop_id");
+    const currentShopId = getShopId();
 
     if (!deviceId || cartItems.length === 0) {
       alert("Missing device ID or empty cart.");
@@ -268,8 +290,8 @@ export default function RestaurantCart() {
     formData.append("transaction_id", transactionId);
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", tableNo);
-    formData.append("order_date", new Date().toISOString().split("T")[0]);
-    formData.append("shop_id", shop_id);
+    formData.append("order_date", getTodayDate());
+    formData.append("shop_id", currentShopId);
     formData.append("wallet_amount", "0.00");
     formData.append("online_amount", totalAmount.toFixed(2));
     formData.append("order_type", orderType);
@@ -301,33 +323,31 @@ export default function RestaurantCart() {
     await createLiquidityOrder();
   };
 
-  // ✅ FIXED: Conditional restaurantLink
-const hasTableNumber = !!getLocalStorage("table_number");
-const restaurantLink = hasTableNumber 
-  ? `/restaurant/${shopId}?table=${tableNo}`
-  : `/restaurant/${shopId}`;
+  const hasTableNumber = !!getLocalStorage("table_number");
+  const currentShopId = getShopId();
+  const restaurantLink = hasTableNumber 
+    ? `/restaurant/${currentShopId}?table=${tableNo}`
+    : `/restaurant/${currentShopId}`;
 
-// ✅ FIXED: Conditional handleBack
-const handleBack = () => {
-  const shopId = getLocalStorage("shop_id") || getLocalStorage("restaurant_id");
-  const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
-  
-  if (shopId && tableNo) {
-    router.push(`/restaurant/${shopId}?table=${tableNo}`);
-  } else if (shopId) {
-    router.push(`/restaurant/${shopId}`);
-  } else {
-    router.push("/restaurant");
-  }
-};
-
+  const handleBack = () => {
+    const shopId = getShopId();
+    const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
+    
+    if (shopId && tableNo) {
+      router.push(`/restaurant/${shopId}?table=${tableNo}`);
+    } else if (shopId) {
+      router.push(`/restaurant/${shopId}`);
+    } else {
+      router.push("/restaurant");
+    }
+  };
 
   const getSectionTitle = () => {
     const hasTableNumber = !!getLocalStorage("table_number");
     const currentTableNo = getLocalStorage("table_number") || tableNo;
     return hasTableNumber && currentTableNo 
-      ? `Current tab (Table #${currentTableNo})` 
-      : "Current Bar Tab";
+      ? `Today's tab (Table #${currentTableNo})` 
+      : "Today's Bar Tab";
   };
 
   // Import components dynamically to avoid SSR issues
@@ -407,8 +427,8 @@ const handleBack = () => {
               <div className="p-4 text-center text-gray-400 text-sm">
                 <p className="italic">
                   {getLocalStorage("table_number") 
-                    ? `No previous orders for Table #${getLocalStorage("table_number")}` 
-                    : "No previous bar orders (type 1)"
+                    ? `No previous orders for Table #${getLocalStorage("table_number")} today` 
+                    : "No previous bar orders today"
                   }
                 </p>
               </div>
@@ -416,26 +436,22 @@ const handleBack = () => {
               <div className="">
                 {matchedOrders.map((order) => (
                   <div key={order.id} className="">
-
-                    
-
-                    
-                      {order.products.map((product) => (
-                        <div key={product.id} className={`${styles.billingItem}`}>
-                          <div className={styles.itemleft}>
-                            <p>
-                              {product.product_name}
-                              {product.unit && ` (${product.unit})`}
-                              {parseInt(product.quantity || '1') > 1 && ` x${product.quantity}`}
-                            </p>
-                          </div>
-                          <div className={styles.itemRight}>
-                            <p>
-                              ${(parseFloat(product.price || '0') * parseFloat(product.quantity || '1')).toFixed(2)}
-                            </p>
-                          </div>
+                    {order.products.map((product) => (
+                      <div key={product.id} className={`${styles.billingItem}`}>
+                        <div className={styles.itemleft}>
+                          <p>
+                            {product.product_name}
+                            {product.unit && ` (${product.unit})`}
+                            {parseInt(product.quantity || '1') > 1 && ` x${product.quantity}`}
+                          </p>
                         </div>
-                      ))}
+                        <div className={styles.itemRight}>
+                          <p>
+                            ${(parseFloat(product.price || '0') * parseFloat(product.quantity || '1')).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

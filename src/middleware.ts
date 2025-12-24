@@ -18,6 +18,8 @@ const publicRoutes = [
   '/bar-guest/',
   '/bar-order/',
   '/bar-order-details/',
+  '/order-choose/',
+  '/order-login/',
 ];
 
 export function middleware(request: NextRequest) {

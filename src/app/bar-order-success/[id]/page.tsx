@@ -95,7 +95,7 @@ export default function OrderSuccess() {
   const handleOrderAnother = useCallback(() => {
     clearPolling();
     const { shopId, tableNo } = getLocalStorageValues();
-    router.push(`/restaurant/${shopId}?table=${tableNo}`);
+    router.push(`/restaurant/${shopId}`);
   }, [router, clearPolling, getLocalStorageValues]);
 
   // ✅ FIXED: Stable dependencies

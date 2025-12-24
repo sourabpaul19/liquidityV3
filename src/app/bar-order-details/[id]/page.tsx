@@ -288,7 +288,7 @@ const handleBackClick = useCallback(() => {
             </svg>
           </Link>
         </header>
-        <section className="pageWrapper hasHeader hasFooter">
+        <section className="pageWrapper hasHeader">
           <div className="pageContainer">
             <div className="text-center py-10 text-gray-500">Order not found</div>
           </div>
@@ -388,7 +388,7 @@ const handleBackClick = useCallback(() => {
         <button className='icon_only'></button>
       </header>
 
-      <section className="pageWrapper hasHeader hasFooter">
+      <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4">
             {/* SHOP INFO */}
@@ -524,7 +524,6 @@ const handleBackClick = useCallback(() => {
           </div>
         </div>
       </section>
-      <BottomNavigation />
     </>
   );
 }
