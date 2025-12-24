@@ -146,37 +146,38 @@ export default function Restaurant() {
 
   // ---------- LOGOUT FUNCTIONS ----------
   const handleLogoutConfirm = () => {
-    setShowLogoutModal(false);
-    
-    // Check order_type before logout
-    const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
-    const hasBarOrder = orderType === 'bar';
-    
-    // Clear all storage
-    if (typeof window !== "undefined") {
-      localStorage.clear();
-      sessionStorage.clear();
-    }
-    
-    // Clear cart state
-    setCartItems([]);
-    setCartTotal(0);
-    setCartCount(0);
-    setUserId("");
-    setIsLoggedIn(false);
-    
-    toast.success('Logged out successfully', {
-      duration: 3000,
-      position: 'top-right'
-    });
-    
-    // Redirect based on order_type
-    const redirectUrl = hasBarOrder 
-      ? `http://localhost:3000/bar-order?shop=${shopId}`
-      : `http://localhost:3000/table?shop=${shopId}`;
-    
-    window.location.href = redirectUrl;
-  };
+  setShowLogoutModal(false);
+  
+  // Check order_type before logout
+  const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
+  const hasBarOrder = orderType === 'bar';
+  
+  // Clear all storage
+  if (typeof window !== "undefined") {
+    localStorage.clear();
+    sessionStorage.clear();
+  }
+  
+  // Clear cart state
+  setCartItems([]);
+  setCartTotal(0);
+  setCartCount(0);
+  setUserId("");
+  setIsLoggedIn(false);
+  
+  toast.success('Logged out successfully', {
+    duration: 3000,
+    position: 'top-right'
+  });
+  
+  // Redirect based on order_type using router.push
+  const redirectUrl = hasBarOrder 
+    ? `/bar-order?shop=${shopId}`
+    : `/table?shop=${shopId}`;
+  
+  router.push(redirectUrl);
+};
+
 
   const handleLogoutCancel = () => {
     setShowLogoutModal(false);
