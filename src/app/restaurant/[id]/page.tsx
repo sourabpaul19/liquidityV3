@@ -689,7 +689,11 @@ export default function Restaurant() {
           <div className={styles.bottomButton}>
             <div className="flex gap-3">
               <button
-                onClick={() => router.push("/restaurant-cart")}
+                onClick={() => {
+                  const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
+                  const cartPage = orderType === 'bar' ? '/bar-cart' : '/restaurant-cart';
+                  router.push(cartPage);
+                }}
                 className="bg-primary px-4 py-3 rounded-lg w-full text-white flex justify-between items-center"
               >
                 <span>({cartCount} items | ${cartTotal.toFixed(2)})</span>

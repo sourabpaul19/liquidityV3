@@ -16,12 +16,15 @@ const publicRoutes = [
   '/my-table',
   '/table-order-success',
   '/bar-order-success',
+  '/bar-order-status',
   '/bar-guest',
+  '/bar-cart',
   '/bar-order',
   '/bar-order-details',
   '/order-choose',
   '/order-login',
   '/order-otp-verify',
+  '/order-new-account',
 ];
 
 export function middleware(request: NextRequest) {
