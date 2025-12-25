@@ -179,43 +179,7 @@ const handleBackClick = useCallback(() => {
             </svg>
           </button>
           <h2 className='pageTitle'>My Orders</h2>
-          <Link href='/search' className='icon_only'>
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <g clipPath="url(#clip0_10_112)">
-                <mask
-                  id="mask0_10_112"
-                  maskUnits="userSpaceOnUse"
-                  x="0"
-                  y="0"
-                  width="24"
-                  height="24"
-                >
-                  <path d="M24 0H0V24H24V0Z" fill="white" />
-                </mask>
-                <g mask="url(#mask0_10_112)">
-                  <path
-                    d="M10.5691 0C4.74145 0 0 4.74145 0 10.5691C0 16.3971 4.74145 21.1382 10.5691 21.1382C16.3971 21.1382 21.1382 16.3971 21.1382 10.5691C21.1382 4.74145 16.3971 0 10.5691 0ZM10.5691 19.187C5.81723 19.187 1.95122 15.321 1.95122 10.5691C1.95122 5.81728 5.81723 1.95122 10.5691 1.95122C15.321 1.95122 19.187 5.81723 19.187 10.5691C19.187 15.321 15.321 19.187 10.5691 19.187Z"
-                    fill="#28303F"
-                  />
-                  <path
-                    d="M23.714 22.3347L18.1205 16.7412C17.7393 16.36 17.1221 16.36 16.7409 16.7412C16.3598 17.122 16.3598 17.7399 16.7409 18.1207L22.3344 23.7142C22.4249 23.805 22.5324 23.8769 22.6508 23.926C22.7692 23.975 22.8961 24.0002 23.0242 24.0001C23.1523 24.0002 23.2792 23.975 23.3976 23.9259C23.516 23.8769 23.6235 23.8049 23.714 23.7142C24.0951 23.3334 24.0951 22.7155 23.714 22.3347Z"
-                    fill="#28303F"
-                  />
-                </g>
-              </g>
-              <defs>
-                <clipPath id="clip0_10_112">
-                  <rect width="24" height="24" fill="white" />
-                </clipPath>
-              </defs>
-            </svg>
-          </Link>
+          <button className='icon_only'></button>
         </header>
         <section className="pageWrapper hasHeader hasFooter">
           <div className="pageContainer">
@@ -250,43 +214,7 @@ const handleBackClick = useCallback(() => {
             </svg>
           </button>
           <h2 className='pageTitle'>My Orders</h2>
-          <Link href='/search' className='icon_only'>
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <g clipPath="url(#clip0_10_112)">
-                <mask
-                  id="mask0_10_112"
-                  maskUnits="userSpaceOnUse"
-                  x="0"
-                  y="0"
-                  width="24"
-                  height="24"
-                >
-                  <path d="M24 0H0V24H24V0Z" fill="white" />
-                </mask>
-                <g mask="url(#mask0_10_112)">
-                  <path
-                    d="M10.5691 0C4.74145 0 0 4.74145 0 10.5691C0 16.3971 4.74145 21.1382 10.5691 21.1382C16.3971 21.1382 21.1382 16.3971 21.1382 10.5691C21.1382 4.74145 16.3971 0 10.5691 0ZM10.5691 19.187C5.81723 19.187 1.95122 15.321 1.95122 10.5691C1.95122 5.81728 5.81723 1.95122 10.5691 1.95122C15.321 1.95122 19.187 5.81723 19.187 10.5691C19.187 15.321 15.321 19.187 10.5691 19.187Z"
-                    fill="#28303F"
-                  />
-                  <path
-                    d="M23.714 22.3347L18.1205 16.7412C17.7393 16.36 17.1221 16.36 16.7409 16.7412C16.3598 17.122 16.3598 17.7399 16.7409 18.1207L22.3344 23.7142C22.4249 23.805 22.5324 23.8769 22.6508 23.926C22.7692 23.975 22.8961 24.0002 23.0242 24.0001C23.1523 24.0002 23.2792 23.975 23.3976 23.9259C23.516 23.8769 23.6235 23.8049 23.714 23.7142C24.0951 23.3334 24.0951 22.7155 23.714 22.3347Z"
-                    fill="#28303F"
-                  />
-                </g>
-              </g>
-              <defs>
-                <clipPath id="clip0_10_112">
-                  <rect width="24" height="24" fill="white" />
-                </clipPath>
-              </defs>
-            </svg>
-          </Link>
+          <button className='icon_only'></button>
         </header>
         <section className="pageWrapper hasHeader">
           <div className="pageContainer">

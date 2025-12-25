@@ -672,7 +672,7 @@ export default function RestaurantCart() {
 
               {/* Payment Mode Toggle */}
               <div className="mt-6 grid grid-cols-1 gap-3">
-                <button
+                {/* <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
                   className={`py-3 px-4 rounded-lg font-medium border ${
@@ -682,6 +682,18 @@ export default function RestaurantCart() {
                   }`}
                 >
                   New Card
+                </button> */}
+
+                <button
+                  type="button"
+                  onClick={() => setPayMode("new_card")}
+                  className={`py-3 px-4 rounded-lg font-medium border ${
+                    payMode === "new_card"
+                      ? "bg-primary text-white border-primary shadow-lg"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
+                  }`}
+                >
+                  Card ${finalTotalAmount}
                 </button>
               </div>
 
