@@ -114,11 +114,14 @@ export default function Welcome() {
     }
   };
 
-  // Init device ID + location
+  // Init device ID + location + clear user_id
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const initAll = async () => {
+      // Always clear any previous user_id
+      localStorage.removeItem("user_id");
+
       // Device ID
       let deviceId = localStorage.getItem("device_id");
       if (!deviceId) {
@@ -148,11 +151,12 @@ export default function Welcome() {
     void initAll();
   }, []);
 
-  // Auto redirect if logged in
+  // Auto redirect if logged in (also clear user_id just in case)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const loggedIn = localStorage.getItem("isLoggedIn");
     if (loggedIn === "true") {
+      localStorage.removeItem("user_id");
       router.replace("/home");
     }
   }, [router]);
