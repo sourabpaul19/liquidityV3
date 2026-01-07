@@ -188,7 +188,7 @@ export default function TablePage() {
       {/* ✅ FIXED: Dynamic table link with shopId */}
       <div className={styles.otpFooter}>
         <p className="text-center">
-          <Link href={`/table?shop=${shopId}`}>Ordering at the table?</Link>
+          <Link href={`/table?shop=${shopId}`}>Ordering at a table?</Link>
         </p>
       </div>
     </div>

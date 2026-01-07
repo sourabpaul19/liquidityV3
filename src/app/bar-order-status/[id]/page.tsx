@@ -254,7 +254,7 @@ export default function OrderSuccess() {
   return (
     <>
       {/* BODY */}
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
             <div className={styles.successIcon}>

@@ -592,7 +592,7 @@ export default function RestaurantCart() {
             <div className={styles.billingArea}>
               <h4 className="text-lg font-semibold mb-4">Billing Summary</h4>
 
-              <h5 className="text-lg font-semibold mb-3">{getSectionTitle()}</h5>
+              {/* <h5 className="text-lg font-semibold mb-3">{getSectionTitle()}</h5>
               
               {loadingOrders ? (
                 <p className="p-2 text-center text-gray-500 text-sm">Loading previous orders...</p>
@@ -628,9 +628,9 @@ export default function RestaurantCart() {
                     </div>
                   ))}
                 </div>
-              )}
+              )} */}
 
-              <h5 className="text-lg font-semibold mb-3">Latest Cart</h5>
+              {/* <h5 className="text-lg font-semibold mb-3">Latest Cart</h5> */}
               {loading ? (
                 <p className="p-2 text-center text-gray-500 text-sm">Loading...</p>
               ) : cartItems.length === 0 ? (
@@ -744,12 +744,12 @@ export default function RestaurantCart() {
             </form>
           </div>
         </div>
-        <div className={styles.cartFooter}>
+        {/* <div className={styles.cartFooter}>
           <p>
             To close your bill, or for any questions regarding<br />
             your bill, please speak to your server
           </p>
-        </div>
+        </div> */}
       </section>
     </>
   );

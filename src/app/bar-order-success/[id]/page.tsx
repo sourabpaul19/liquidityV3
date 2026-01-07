@@ -240,7 +240,12 @@ export default function OrderSuccess() {
               {getStatusMessage(squareStatus)}
             </h4>
 
-            <h5 className="text-center">Please wait near the bar</h5>
+            <h5 className="text-center">
+  {squareStatus === "PREPARED"
+    ? "Please pick it up at the bar"
+    : "Please wait near the bar"}
+</h5>
+
 
             <div className={styles.progress}>
               {/* 1. PROPOSED */}
