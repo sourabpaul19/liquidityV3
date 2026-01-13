@@ -32,7 +32,7 @@ export default function Welcome() {
       .join('');
   };
 
-  // Stable device ID from multiple signals (no deviceMemory)
+  // Stable device ID from multiple signals
   const generateStableDeviceId = async (): Promise<string> => {
     const canvas = await getCanvasFingerprint();
     const hardware = `${navigator.hardwareConcurrency || 0}`;
@@ -114,34 +114,35 @@ export default function Welcome() {
     }
   };
 
-  // Init device ID + location + clear user_id
+  // 🔥 MAIN INIT: Clear ALL localStorage + generate fresh device/location
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const initAll = async () => {
-      // Always clear any previous user_id
-      localStorage.removeItem("user_id");
+      // 🧹 CLEAR ALL PREVIOUS LOCALSTORAGE DATA FOR FRESH START
+      console.log("🧹 Clearing ALL localStorage data for fresh start...");
+      localStorage.clear();
 
-      // Device ID
+      // Device ID (NEW since storage cleared)
       let deviceId = localStorage.getItem("device_id");
       if (!deviceId) {
-        console.log("🔄 Generating stable device fingerprint...");
+        console.log("🔄 Generating NEW stable device fingerprint...");
         deviceId = await generateStableDeviceId();
         localStorage.setItem("device_id", deviceId);
-        console.log("✅ NEW STABLE Device ID:", deviceId);
+        console.log("✅ NEW STABLE Device ID:", deviceId.substring(0, 16) + "...");
       } else {
-        console.log("✅ EXISTING STABLE Device ID:", deviceId);
+        console.log("✅ EXISTING STABLE Device ID:", deviceId.substring(0, 16) + "...");
       }
 
-      // Location
+      // Location (fresh fetch since storage cleared)
       await initLocation();
 
-      // Final debug
+      // Final debug log
       setTimeout(() => {
         const lat = localStorage.getItem("latitude");
         const lng = localStorage.getItem("longitude");
-        console.log("📍 FINAL STATE:", {
-          device_id: deviceId,
+        console.log("📍 FINAL FRESH STATE:", {
+          device_id: localStorage.getItem("device_id")?.substring(0, 16) + "...",
           lat,
           lng,
         });
@@ -151,12 +152,11 @@ export default function Welcome() {
     void initAll();
   }, []);
 
-  // Auto redirect if logged in (also clear user_id just in case)
+  // Auto redirect if logged in (unlikely after clear, but safety check)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const loggedIn = localStorage.getItem("isLoggedIn");
     if (loggedIn === "true") {
-      localStorage.removeItem("user_id");
       router.replace("/home");
     }
   }, [router]);

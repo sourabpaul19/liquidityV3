@@ -65,7 +65,16 @@ export default function TablePage() {
     return sha256(JSON.stringify(signals));
   };
 
-  // Store shopId in localStorage on page load
+  // *** NEW: Clear ALL localStorage on page mount ***
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Clear ALL previous localStorage data
+    localStorage.clear();
+    console.log("Cleared all localStorage data on TablePage mount");
+  }, []); // Empty dependency array = runs once on mount
+
+  // Store shopId in localStorage after clearing
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -74,7 +83,7 @@ export default function TablePage() {
     }
   }, [shopId]);
 
-  // Initialize device ID on mount
+  // Initialize device ID on mount (after clear)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -89,16 +98,16 @@ export default function TablePage() {
     void initDeviceId();
   }, []);
 
-  // Clear order_type=bar on load
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const orderType = localStorage.getItem("order_type");
-    if (orderType === "bar") {
-      localStorage.removeItem("order_type");
-      console.log("Removed order_type from localStorage");
-    }
-  }, []); // runs once on mount[web:39][web:36]
+  // *** REMOVE this useEffect - no longer needed since we clear everything ***
+  // useEffect(() => {
+  //   if (typeof window === "undefined") return;
+  //
+  //   const orderType = localStorage.getItem("order_type");
+  //   if (orderType === "bar") {
+  //     localStorage.removeItem("order_type");
+  //     console.log("Removed order_type from localStorage");
+  //   }
+  // }, []);
 
   // Fetch shop details from API
   useEffect(() => {
@@ -130,19 +139,17 @@ export default function TablePage() {
     }
   }, [shopId]);
 
-  // Shared handler for table verification + auth route
+  // Rest of your handlers remain the same...
   const handleVerify = () => {
     const tableNumber = eventCode.trim();
 
     if (tableNumber) {
       localStorage.setItem('shop_id', shopId);
       localStorage.setItem('table_number', tableNumber);
-      //router.push(`/guest?shop=${shopId}&table=${tableNumber}`);
       router.push(`/order-choose`);
     }
   };
 
-  // Guest proceed handler
   const handleGuestProceed = () => {
     const tableNumber = eventCode.trim();
 
@@ -191,7 +198,7 @@ export default function TablePage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          handleVerify();           // Enter key triggers same logic
+          handleVerify();
         }}
         className={`${styles.welcomeForm} mb-3`}
       >
@@ -208,7 +215,7 @@ export default function TablePage() {
       {/* Auth / Guest Buttons */}
       <div className={styles.welcomeForm}>
         <button
-          onClick={handleVerify}    // Same handler as form submit
+          onClick={handleVerify}
           className="bg-primary px-3 py-3 rounded-lg w-full text-white text-center mt-3"
           disabled={!eventCode.trim()}
         >

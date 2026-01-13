@@ -63,7 +63,16 @@ export default function TablePage() {
     return sha256(JSON.stringify(signals));
   };
 
-  // ✅ FIXED: Initialize device ID + STORE shop_id + CLEAR table_number + SET order_type="bar"
+  // *** NEW: Clear ALL localStorage on page mount (BAR FLOW) ***
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Clear ALL previous localStorage data
+    localStorage.clear();
+    console.log("🧹 CLEARED ALL localStorage data on BarOrder page mount");
+  }, []); // Empty dependency array = runs ONCE on mount
+
+  // ✅ FIXED: Initialize device ID + STORE shop_id + SET order_type="bar" (AFTER clear)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -78,24 +87,19 @@ export default function TablePage() {
         console.log("✅ EXISTING STABLE Device ID:", deviceId);
       }
 
-      // ✅ FIXED: Store shop_id IMMEDIATELY when page loads
+      // ✅ Store shop_id IMMEDIATELY when page loads
       if (shopId) {
         localStorage.setItem("shop_id", shopId);
         console.log("✅ STORING shop_id:", shopId);
       }
 
-      // ✅ BAR FLOW: Clear table_number (table-based flow → bar/guest flow)
-      localStorage.removeItem("table_number");
-      localStorage.removeItem("table_no");
-      
-      // ✅ NEW: Set order_type = "bar" for bar flow
+      // ✅ BAR FLOW: Set order_type = "bar" for bar flow
       localStorage.setItem("order_type", "bar");
-      
-      console.log("🧹 CLEARED table_number/table_no + SET order_type=bar for bar flow");
+      console.log("✅ SET order_type=bar for bar flow");
     };
 
     void initDeviceIdAndShop();
-  }, [shopId]); // ✅ DEPENDENCY: Runs when shopId is available
+  }, [shopId]); // Runs when shopId is available
 
   // Fetch shop details from API
   useEffect(() => {
@@ -164,7 +168,7 @@ export default function TablePage() {
 
       <p className="text-lg text-center mb-8 leading-relaxed">
         Please <span className="font-semibold">sign in</span> or <span className="font-semibold">proceed as a guest</span>
-      </p>       
+      </p>      
 
       {/* Buttons */}
       <div className={styles.welcomeForm}>

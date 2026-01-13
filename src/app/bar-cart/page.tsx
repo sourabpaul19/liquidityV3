@@ -541,7 +541,7 @@ export default function RestaurantCart() {
         <button type="button" className="icon_only"></button>
       </header>
 
-      <section className="pageWrapper hasHeader hasFooter">
+      <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           {/* Cart Items */}
           {loading ? (
