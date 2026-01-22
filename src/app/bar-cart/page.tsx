@@ -65,8 +65,7 @@ const TipsSelector = dynamic(
   { ssr: false }
 );
 
-// ---------- SMALL COMPONENTS ----------
-
+// ---------- ✅ NEW CARD PAYMENT FORM - STAYS DISABLED UNTIL REDIRECT ----------
 function NewCardPaymentForm({
   clientSecret,
   amountLabel,
@@ -82,7 +81,7 @@ function NewCardPaymentForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stripe || !elements || !clientSecret) return;
+    if (!stripe || !elements || !clientSecret || processing) return;
 
     setProcessing(true);
 
@@ -105,17 +104,15 @@ function NewCardPaymentForm({
       }
     );
 
-    setProcessing(false);
-
     if (error) {
+      setProcessing(false);
       alert(error.message || "Payment failed");
       return;
     }
 
     if (paymentIntent && paymentIntent.status === "succeeded") {
+      // ✅ KEEP DISABLED - pass to parent, don't reset processing
       await onSuccess(paymentIntent.id);
-    } else {
-      alert("Payment did not complete.");
     }
   };
 
@@ -134,23 +131,34 @@ function NewCardPaymentForm({
           }}
         />
       </div>
+      
+      {/* ✅ FULL LOADING OVERLAY - STAYS DISABLED UNTIL REDIRECT */}
       <button
         type="submit"
         disabled={!stripe || !clientSecret || processing}
-        className={`w-full py-3 px-4 rounded-lg font-medium transition ${
+        className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
           !stripe || !clientSecret || processing
-            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-            : "bg-primary text-white hover:bg-primary/90"
+            ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50"
+            : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
         }`}
       >
-        {processing ? (
-          <span className="flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Processing…
-          </span>
-        ) : (
+        <div className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+          processing ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+        }`}>
+          <div className="text-center text-white px-4">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+            <div className="text-sm font-medium">
+              Processing Payment...
+            </div>
+            <div className="text-xs mt-1 opacity-90">Please wait</div>
+          </div>
+        </div>
+        
+        <span className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+          processing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
+        }`}>
           `Pay ${amountLabel}`
-        )}
+        </span>
       </button>
     </form>
   );
@@ -186,7 +194,6 @@ export default function RestaurantCart() {
     return localStorage.getItem(key) || "";
   };
 
-  // ✅ Get current shop ID helper
   const getShopId = (): string => {
     const selected_shop = getLocalStorage("selected_shop");
     return selected_shop
@@ -194,12 +201,10 @@ export default function RestaurantCart() {
       : getLocalStorage("shop_id");
   };
 
-  // ✅ Get today's date in YYYY-MM-DD format
   const getTodayDate = (): string => {
     return new Date().toISOString().split("T")[0];
   };
 
-  // ✅ Load from localStorage SAFELY
   useEffect(() => {
     const storedDevice = getLocalStorage("device_id");
     const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
@@ -208,7 +213,6 @@ export default function RestaurantCart() {
     const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
     const storedShopName = storedShopParsed?.name || "";
 
-    // Set default user data
     if (!getLocalStorage("user_email")) {
       if (typeof window !== "undefined") {
         localStorage.setItem("user_email", "user@liquiditybars.com");
@@ -226,33 +230,19 @@ export default function RestaurantCart() {
     setShopName(storedShopName);
   }, []);
 
-  // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
   const filterOrdersByTable = useCallback((allOrders: Order[]) => {
     const hasTableNumber = !!getLocalStorage("table_number");
     const currentTableNo = getLocalStorage("table_number") || tableNo;
     const currentShopId = getShopId();
     const todayDate = getTodayDate();
 
-    console.log("🔍 Filtering:", { 
-      allOrders: allOrders.length, 
-      tableNo: currentTableNo, 
-      hasTableNumber,
-      currentShopId,
-      todayDate
-    });
-
     return allOrders.filter((order) => {
-      // ✅ Must match today's date ONLY
       if (order.order_date !== todayDate) return false;
-
-      // ✅ Must match shop_id
       if (currentShopId && order.shop_id !== currentShopId) return false;
 
       if (hasTableNumber && currentTableNo) {
-        // Table mode: table_no MATCH + order_type = "2"
         return order.table_no === currentTableNo && order.order_type === "2";
       } else {
-        // Bar mode: order_type = "1" ONLY
         return order.order_type === "1";
       }
     });
@@ -390,7 +380,6 @@ export default function RestaurantCart() {
     };
   };
 
-  // Initialize Stripe payment
   const initStripePayment = async () => {
     if (!deviceId) {
       alert("Missing device ID.");
@@ -429,6 +418,7 @@ export default function RestaurantCart() {
     }
   };
 
+  // ✅ FIXED: Button stays disabled until redirect
   const createLiquidityOrder = async (transactionId: string) => {
     const { user_name, user_email, user_mobile } = getUserInfo();
     const currentShopId = getShopId();
@@ -478,6 +468,7 @@ export default function RestaurantCart() {
   };
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
+    // ✅ Button stays disabled - redirect happens in createLiquidityOrder
     await createLiquidityOrder(paymentIntentId);
   };
 
@@ -487,7 +478,6 @@ export default function RestaurantCart() {
     if (payMode === "new_card" && !clientSecret) {
       await initStripePayment();
     } else {
-      // For future saved card implementation
       alert("Saved card payment coming soon!");
     }
   };
@@ -511,15 +501,6 @@ export default function RestaurantCart() {
     }
   };
 
-  const getSectionTitle = () => {
-    const hasTableNumber = !!getLocalStorage("table_number");
-    const currentTableNo = getLocalStorage("table_number") || tableNo;
-    return hasTableNumber && currentTableNo 
-      ? `Today's tab (Table #${currentTableNo})` 
-      : "Today's Bar Tab";
-  };
-
-  // Import components dynamically to avoid SSR issues
   const Header = dynamic(() => import("@/components/common/Header/Header"), { ssr: false });
   const QuantityButton = dynamic(() => import("@/components/common/QuantityButton/QuantityButton"), { ssr: false });
 
@@ -592,45 +573,6 @@ export default function RestaurantCart() {
             <div className={styles.billingArea}>
               <h4 className="text-lg font-semibold mb-4">Billing Summary</h4>
 
-              {/* <h5 className="text-lg font-semibold mb-3">{getSectionTitle()}</h5>
-              
-              {loadingOrders ? (
-                <p className="p-2 text-center text-gray-500 text-sm">Loading previous orders...</p>
-              ) : matchedOrders.length === 0 ? (
-                <div className="p-4 text-center text-gray-400 text-sm">
-                  <p className="italic">
-                    {getLocalStorage("table_number") 
-                      ? `No previous orders for Table #${getLocalStorage("table_number")} today` 
-                      : "No previous bar orders today"
-                    }
-                  </p>
-                </div>
-              ) : (
-                <div className="">
-                  {matchedOrders.map((order) => (
-                    <div key={order.id} className="">
-                      {order.products.map((product) => (
-                        <div key={product.id} className={`${styles.billingItem}`}>
-                          <div className={styles.itemleft}>
-                            <p>
-                              {product.product_name}
-                              {product.unit && ` (${product.unit})`}
-                              {parseInt(product.quantity || '1') > 1 && ` x${product.quantity}`}
-                            </p>
-                          </div>
-                          <div className={styles.itemRight}>
-                            <p>
-                              ${(parseFloat(product.price || '0') * parseFloat(product.quantity || '1')).toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )} */}
-
-              {/* <h5 className="text-lg font-semibold mb-3">Latest Cart</h5> */}
               {loading ? (
                 <p className="p-2 text-center text-gray-500 text-sm">Loading...</p>
               ) : cartItems.length === 0 ? (
@@ -670,20 +612,7 @@ export default function RestaurantCart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* Payment Mode Toggle */}
               <div className="mt-6 grid grid-cols-1 gap-3">
-                {/* <button
-                  type="button"
-                  onClick={() => setPayMode("new_card")}
-                  className={`py-3 px-4 rounded-lg font-medium border ${
-                    payMode === "new_card"
-                      ? "bg-primary text-white border-primary shadow-lg"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
-                  }`}
-                >
-                  New Card
-                </button> */}
-
                 <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
@@ -697,7 +626,6 @@ export default function RestaurantCart() {
                 </button>
               </div>
 
-              {/* New Card Form */}
               {payMode === "new_card" && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
@@ -708,7 +636,6 @@ export default function RestaurantCart() {
             </div>
           </Elements>
 
-          {/* Tips Selector */}
           <TipsSelector
             value={tipPercent}
             onChange={(val: number, isAmount: boolean) => {
@@ -718,38 +645,52 @@ export default function RestaurantCart() {
             }}
           />
 
-          {/* Checkout Buttons */}
+          {/* MAIN CHECKOUT BUTTON */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
-              {payMode === "new_card" && !clientSecret && (
-                <button
-                  type="submit"
-                  disabled={initializingPayment || cartItems.length === 0 || loading}
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    initializingPayment || cartItems.length === 0 || loading
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
-                  }`}
-                >
-                  {initializingPayment ? (
-                    <>
-                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
-                      Starting payment...
-                    </>
-                  ) : (
-                    `Pay $${finalTotalAmount}`
+              <button
+                type="submit"
+                disabled={cartItems.length === 0 || initializingPayment || loading}
+                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
+                  cartItems.length === 0 || initializingPayment || loading
+                    ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50"
+                    : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                }`}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+                  initializingPayment ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                }`}>
+                  {initializingPayment && (
+                    <div className="text-center text-white px-4">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+                      <div className="text-sm font-medium">
+                        {clientSecret ? 'Starting Payment...' : 'Initializing Payment...'}
+                      </div>
+                      <div className="text-xs mt-1 opacity-90">Please wait</div>
+                    </div>
                   )}
-                </button>
-              )}
+                </div>
+                
+                <span className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+                  initializingPayment ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
+                }`}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                      Loading...
+                    </>
+                  ) : cartItems.length === 0 ? (
+                    'Empty Cart'
+                  ) : !clientSecret ? (
+                    `Pay $${finalTotalAmount}`
+                  ) : (
+                    'Confirm Payment'
+                  )}
+                </span>
+              </button>
             </form>
           </div>
         </div>
-        {/* <div className={styles.cartFooter}>
-          <p>
-            To close your bill, or for any questions regarding<br />
-            your bill, please speak to your server
-          </p>
-        </div> */}
       </section>
     </>
   );
