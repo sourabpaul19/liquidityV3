@@ -112,6 +112,7 @@ export default function Restaurant() {
   const [tempSelectedMixer, setTempSelectedMixer] = useState<MenuItem | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [showBillWarning, setShowBillWarning] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false); // NEW: Loading state
   
   // Logout modal state
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -146,38 +147,37 @@ export default function Restaurant() {
 
   // ---------- LOGOUT FUNCTIONS ----------
   const handleLogoutConfirm = () => {
-  setShowLogoutModal(false);
-  
-  // Check order_type before logout
-  const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
-  const hasBarOrder = orderType === 'bar';
-  
-  // Clear all storage
-  if (typeof window !== "undefined") {
-    localStorage.clear();
-    sessionStorage.clear();
-  }
-  
-  // Clear cart state
-  setCartItems([]);
-  setCartTotal(0);
-  setCartCount(0);
-  setUserId("");
-  setIsLoggedIn(false);
-  
-  toast.success('Logged out successfully', {
-    duration: 3000,
-    position: 'top-right'
-  });
-  
-  // Redirect based on order_type using router.push
-  const redirectUrl = hasBarOrder 
-    ? `/bar-order?shop=${shopId}`
-    : `/table?shop=${shopId}`;
-  
-  router.push(redirectUrl);
-};
-
+    setShowLogoutModal(false);
+    
+    // Check order_type before logout
+    const orderType = typeof window !== "undefined" ? localStorage.getItem('order_type') : null;
+    const hasBarOrder = orderType === 'bar';
+    
+    // Clear all storage
+    if (typeof window !== "undefined") {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
+    
+    // Clear cart state
+    setCartItems([]);
+    setCartTotal(0);
+    setCartCount(0);
+    setUserId("");
+    setIsLoggedIn(false);
+    
+    toast.success('Logged out successfully', {
+      duration: 3000,
+      position: 'top-right'
+    });
+    
+    // Redirect based on order_type using router.push
+    const redirectUrl = hasBarOrder 
+      ? `/bar-order?shop=${shopId}`
+      : `/table?shop=${shopId}`;
+    
+    router.push(redirectUrl);
+  };
 
   const handleLogoutCancel = () => {
     setShowLogoutModal(false);
@@ -458,7 +458,7 @@ export default function Restaurant() {
 
   // ---------- SHOP CHECK ----------
   const checkShopBeforeAdd = async (item: MenuItem | null, qty: number) => {
-    if (!item) return;
+    if (!item || isAddingToCart) return; // UPDATED: Check loading state
 
     const cartShop =
       typeof window !== "undefined" ? localStorage.getItem("cart_shop_id") : null;
@@ -477,16 +477,21 @@ export default function Restaurant() {
     await addToCart(item, qty);
   };
 
-  // ---------- ADD TO CART ----------
+  // ---------- ADD TO CART (UPDATED WITH LOADING STATE) ----------
   const addToCart = async (item: MenuItem, qty: number) => {
     if (qty <= 0) {
       toast.error("Please choose a quantity");
       return;
     }
 
+    // Prevent multiple clicks
+    if (isAddingToCart) return;
+
     const controller = new AbortController();
 
     try {
+      setIsAddingToCart(true); // Show loader
+
       const userIdLocal =
         typeof window !== "undefined" ? localStorage.getItem("user_id") || "" : "";
       const deviceIdLocal =
@@ -547,6 +552,8 @@ export default function Restaurant() {
     } catch (e: any) {
       console.error("💥 addToCart ERROR:", e.message);
       toast.error("Network error");
+    } finally {
+      setIsAddingToCart(false); // Re-enable button
     }
   };
 
@@ -772,11 +779,20 @@ export default function Restaurant() {
             />
           </div>
 
+          {/* UPDATED: Add to cart button with loading state */}
           <button
-            className="w-full bg-primary text-white py-2 rounded-lg"
+            className="w-full bg-primary text-white py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => checkShopBeforeAdd(selectedItem!, modalQty)}
+            disabled={isAddingToCart}
           >
-            Add to cart
+            {isAddingToCart ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Adding...
+              </>
+            ) : (
+              "Add to cart"
+            )}
           </button>
         </Modal>
       )}

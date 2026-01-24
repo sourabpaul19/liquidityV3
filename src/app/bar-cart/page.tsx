@@ -283,7 +283,7 @@ export default function RestaurantCart() {
     if (!deviceId) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/getCart", {
+      const res = await fetch("/api/tableGetCart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ device_id: deviceId }),
