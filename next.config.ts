@@ -12,6 +12,11 @@ const nextConfig = {
         hostname: "liquiditybars.com",
         pathname: "/canada/backend/assets/upload/**",
       },
+      {
+        protocol: "https",
+        hostname: "dev2024.co.in",
+        pathname: "/web/liquidity-backend/assets/upload/**",
+      },
     ],
   },
 };

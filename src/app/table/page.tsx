@@ -114,7 +114,7 @@ export default function TablePage() {
     const fetchShopData = async () => {
       try {
         const response = await fetch(
-          'https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers'
+          'https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers'
         );
         const data = await response.json();
 

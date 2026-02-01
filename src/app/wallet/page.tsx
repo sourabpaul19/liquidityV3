@@ -121,7 +121,7 @@ const StripeCardForm: React.FC<StripeCardFormProps> = ({
 
       // 4) Refresh wallet data from backend
       const refreshRes = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
+        `https://dev2024.co.in/web/liquidity-backend/admin/api/fetch_wallet_balance/${userId}`
       );
       const refreshData = await refreshRes.json();
 
@@ -227,7 +227,7 @@ export default function Wallet() {
     const fetchWalletData = async () => {
       try {
         const res = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/fetch_wallet_balance/${userId}`
+          `https://dev2024.co.in/web/liquidity-backend/admin/api/fetch_wallet_balance/${userId}`
         );
         const data = await res.json();
 

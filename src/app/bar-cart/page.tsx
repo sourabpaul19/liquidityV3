@@ -253,7 +253,7 @@ export default function RestaurantCart() {
     setLoadingOrders(true);
     try {
       const res = await fetch(
-        `https://liquiditybars.com/canada/backend/admin/api/tblOrderList/${deviceId}`
+        `https://dev2024.co.in/web/liquidity-backend/admin/api/tblOrderList/${deviceId}`
       );
       const data = await res.json();
 
@@ -338,7 +338,7 @@ export default function RestaurantCart() {
       formData.append("quantity", String(newQty));
 
       const res = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/updateTempCartData",
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/updateTempCartData",
         { method: "POST", body: formData }
       );
       const data = await res.json();
@@ -448,7 +448,7 @@ export default function RestaurantCart() {
 
     try {
       const res = await fetch(
-        "https://liquiditybars.com/canada/backend/admin/api/createTblOrder",
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/createTblOrder",
         { method: "POST", body: formData }
       );
       const data = await res.json();

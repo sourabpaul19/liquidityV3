@@ -307,7 +307,7 @@ export default function Restaurant() {
         console.log("Current shop:", shopId, "Cart shop:", cartShopId);
 
         const res = await fetch(
-          `https://liquiditybars.com/canada/backend/admin/api/clearTempCart/${deviceId}`,
+          `https://dev2024.co.in/web/liquidity-backend/admin/api/clearTempCart/${deviceId}`,
           { method: "POST" }
         );
 
@@ -352,7 +352,7 @@ export default function Restaurant() {
     const fetchStoreData = async () => {
       try {
         const res = await fetch(
-          "https://liquiditybars.com/canada/backend/admin/api/fetchDashboardDataForTempUsers"
+          "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
         );
         const data = await res.json();
 
@@ -395,7 +395,7 @@ export default function Restaurant() {
     let cancelled = false;
 
     fetch(
-      `https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`
+      `https://dev2024.co.in/web/liquidity-backend/admin/api/fetchCategoriesByShop/${shopId}`
     )
       .then((r) => r.json())
       .then((data) => {

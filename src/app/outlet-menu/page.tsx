@@ -193,7 +193,7 @@ export default function OutletMenu() {
   /* FETCH CATEGORIES for current shop */
   useEffect(() => {
   let cancelled = false;
-  fetch(`https://liquiditybars.com/canada/backend/admin/api/fetchCategoriesByShop/${shopId}`)
+  fetch(`https://dev2024.co.in/web/liquidity-backend/admin/api/fetchCategoriesByShop/${shopId}`)
     .then((res) => res.json())
     .then((data: FetchCategoriesResponse) => {
       if (cancelled) return;
