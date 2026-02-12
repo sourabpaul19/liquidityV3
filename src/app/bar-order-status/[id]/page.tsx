@@ -257,7 +257,7 @@ export default function OrderSuccess() {
     <>
       {/* BODY */}
       <section className="pageWrapper">
-        <div className="pageContainer">
+        <div className="pageContainer vMiddle">
           <div className={styles.successWrapper}>
             <div className={styles.successIcon}>
               <Image src={statusImg} alt="Order status" fill />
