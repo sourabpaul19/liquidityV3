@@ -31,7 +31,7 @@ interface Order {
   products?: OrderProduct[];
 }
 
-type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | null;
+type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | "CANCELED" | null;
 
 // -----------------------------------------
 // STATUS TEXT
@@ -41,6 +41,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   RESERVED: "The Bar Is Preparing Your Order",
   PREPARED: "Your Order Is Ready For Pickup",
   COMPLETED: "Your Order Has Been Completed",
+  CANCELED: "Your Order Has Been Cancelled",
   null: "Your order is being processed",
 };
 
@@ -148,7 +149,8 @@ export default function OrderSuccess() {
             raw === "PROPOSED" ||
             raw === "RESERVED" ||
             raw === "PREPARED" ||
-            raw === "COMPLETED"
+            raw === "COMPLETED" ||
+            raw === "CANCELED"
           ) {
             return raw as SquareStatus;
           }

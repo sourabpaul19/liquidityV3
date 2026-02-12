@@ -6,8 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
-import styles from "../bar-order-success.module.scss";
-import statusImg from "../../../../public/images/status.png";
+import styles from "../bar-order-cancel.module.scss";
+import statusImg from "../../../../public/images/cancel.png";
 
 // -----------------------------------------
 // TYPES
@@ -37,10 +37,10 @@ type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | "CANCEL
 // STATUS TEXT
 // -----------------------------------------
 const STATUS_MESSAGES: Record<string, string> = {
-  PROPOSED: "The Bar Has Received Your Order",
+  PROPOSED: "Your order has been placed, and will be with you shortly",
   RESERVED: "The Bar Is Preparing Your Order",
   PREPARED: "Your Order Is Ready For Pickup",
-  COMPLETED: "Your Order Has Been Collected",
+  COMPLETED: "Your Order Has Been Completed",
   CANCELED: "Your Order Has Been Cancelled",
   null: "Your order is being processed",
 };
@@ -53,7 +53,7 @@ const getStatusMessage = (status: SquareStatus) => {
 // -----------------------------------------
 // COMPONENT
 // -----------------------------------------
-export default function OrderSuccess() {
+export default function OrderCancel() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -62,7 +62,6 @@ export default function OrderSuccess() {
   const [squareStatus, setSquareStatus] = useState<SquareStatus>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasRedirected, setHasRedirected] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -83,7 +82,31 @@ export default function OrderSuccess() {
   }, [order?.outlet_slug, router, clearPolling]);
 
   // -----------------------------
-  // API HELPERS
+  // GET LOCALSTORAGE VALUES
+  // -----------------------------
+  const getLocalStorageValues = useCallback(() => {
+    if (typeof window === "undefined") return { shopId: "", tableNo: "" };
+    
+    const shopId = localStorage.getItem("shop_id") || "";
+    const tableNo = localStorage.getItem("table_number") || localStorage.getItem("table_no") || "";
+    
+    return { shopId, tableNo };
+  }, []);
+
+  const handleOrderAnother = useCallback(() => {
+    clearPolling();
+    const { shopId, tableNo } = getLocalStorageValues();
+    router.push(`/restaurant/${shopId}`);
+  }, [router, clearPolling, getLocalStorageValues]);
+
+  // ✅ FIXED: Stable dependencies
+  const handleViewTab = useCallback(() => {
+    clearPolling();
+    router.push(`/bar-order-details/${id}`);
+  }, [router, clearPolling, id]);
+
+  // -----------------------------
+  // API HELPERS - STABLE DEPENDENCIES
   // -----------------------------
   const fetchOrderDetails = useCallback(async (): Promise<Order | null> => {
     try {
@@ -108,7 +131,7 @@ export default function OrderSuccess() {
       console.error("orderDetails error", e);
       return null;
     }
-  }, [id]);
+  }, [id]); // ✅ Only id dependency
 
   const fetchSquareStatus = useCallback(
     async (squareOrderId: string): Promise<SquareStatus> => {
@@ -139,31 +162,14 @@ export default function OrderSuccess() {
         return null;
       }
     },
-    []
+    [] // ✅ No dependencies - stable function
   );
 
   // -----------------------------
-  // EFFECT: STATUS-BASED REDIRECTS
+  // ✅ FIXED: Stable useEffect dependencies
   // -----------------------------
   useEffect(() => {
-    if (hasRedirected || !order?.id) return;
-
-    if (squareStatus === "CANCELED") {
-      setHasRedirected(true);
-      clearPolling();
-      router.push(`/bar-order-cancel/${order.id}`);
-    } else if (squareStatus === "COMPLETED") {
-      setHasRedirected(true);
-      clearPolling();
-      router.push(`/bar-order-status/${order.id}`);
-    }
-  }, [squareStatus, order?.id, router, clearPolling, hasRedirected]);
-
-  // -----------------------------
-  // EFFECT: INITIAL LOAD + POLLING
-  // -----------------------------
-  useEffect(() => {
-    if (!id || hasRedirected) return;
+    if (!id) return;
 
     let mounted = true;
 
@@ -194,13 +200,16 @@ export default function OrderSuccess() {
 
       setSquareStatus(sq);
 
-      // Update order status (redirect handled by other effect)
       if (sq === "RESERVED") {
         const updated = { ...orderData, status: "2", is_ready: "0" };
         setOrder(updated);
       } else if (sq === "PREPARED") {
         const updated = { ...orderData, status: "2", is_ready: "1" };
         setOrder(updated);
+      } else if (sq === "COMPLETED") {
+        const updated = { ...orderData, status: "2", is_ready: "1" };
+        setOrder(updated);
+        clearPolling(); // Stop polling when completed
       }
 
       setLoading(false);
@@ -217,7 +226,7 @@ export default function OrderSuccess() {
       mounted = false;
       clearPolling();
     };
-  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling, hasRedirected]);
+  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling]); // ✅ Stable dependencies only
 
   // -----------------------------
   // RENDER
@@ -227,16 +236,6 @@ export default function OrderSuccess() {
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
           <p className="text-center mt-10">Loading order...</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (hasRedirected) {
-    return (
-      <section className="pageWrapper hasHeader">
-        <div className="pageContainer">
-          <p className="text-center mt-10">Redirecting...</p>
         </div>
       </section>
     );
@@ -257,102 +256,36 @@ export default function OrderSuccess() {
   return (
     <>
       {/* BODY */}
-      <section className="pageWrapper hasHeader">
+      <section className="pageWrapper">
         <div className="pageContainer">
           <div className={styles.successWrapper}>
-            <h4 className="text-center mb-2">
-              {getStatusMessage(squareStatus)}
-            </h4>
-
-            <h5 className="text-center">
-              {squareStatus === "PREPARED"
-                ? "Please pick it up at the bar"
-                : "Please wait near the bar"}
-            </h5>
-
-            <div className={styles.progress}>
-              {/* 1. PROPOSED */}
-              <div
-                className={`${styles.progressLayer} ${
-                  squareStatus === "PROPOSED"
-                    ? styles.animated
-                    : squareStatus === "RESERVED" ||
-                      squareStatus === "PREPARED" ||
-                      squareStatus === "COMPLETED" ||
-                      squareStatus === "CANCELED"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
-
-              {/* 2. RESERVED */}
-              <div
-                className={`${styles.progressLayer} ${
-                  squareStatus === "RESERVED"
-                    ? styles.animated
-                    : squareStatus === "PREPARED" || 
-                      squareStatus === "COMPLETED" ||
-                      squareStatus === "CANCELED"
-                    ? styles.completed
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
-
-              {/* 3. PREPARED */}
-              <div
-                className={`${styles.progressLayer} ${
-                  (squareStatus === "PREPARED" || 
-                    squareStatus === "COMPLETED" ||
-                    squareStatus === "CANCELED")
-                    ? styles.animated
-                    : ""
-                }`}
-              >
-                <div className={styles.progressBar}></div>
-              </div>
-            </div>
-
             <div className={styles.successIcon}>
               <Image src={statusImg} alt="Order status" fill />
             </div>
 
-            <div className={styles.orderDetails}>
-              <h4 className="mb-2">Estimated order completion time</h4>
-              <p className="flex gap-3">
-                <ClockFading /> 3 - 7 minutes
-              </p>
+            <h4 className="text-center mb-2">
+              {getStatusMessage(squareStatus)}
+            </h4>
 
-              <h4 className="mt-4 mb-2">Order Details</h4>
+            <p className="text-center">
+              <strong>Reason:</strong> One or more ingredients<br/>missing. You will not be charged for<br/>your order.
+            </p>
 
-              {order.products && order.products.length > 0 ? (
-                order.products.map((p) => (
-                  <div
-                    key={p.id}
-                    className="py-4 border-b border-gray-200"
-                  >
-                    <h5>
-                      {p.quantity} × {p.product_name}{" "}
-                      <span>({p.unit || "1oz"})</span>
-                    </h5>
-                    <p>
-                      Mixer Name:{" "}
-                      <span>{p.choice_of_mixer_name || "N/A"}</span>
-                      <br />
-                      Additional Shots: <span>{p.shot_count ?? 0}</span>
-                      <br />
-                      Special Instruction:{" "}
-                      <span>{p.special_instruction || "—"}</span>
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p>No items found for this order.</p>
-              )}
-            </div>
+            <button 
+              type="button"
+              onClick={handleOrderAnother}
+              className="mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              Order Again
+            </button>
+
+            {/* <button 
+              type="button"
+              onClick={handleViewTab}
+              className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-gray-600 hover:bg-gray-700 transition-all hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              Receipt
+            </button> */}
           </div>
         </div>
       </section>

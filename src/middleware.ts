@@ -17,6 +17,7 @@ const publicRoutes = [
   '/table-order-success',
   '/bar-order-success',
   '/bar-order-status',
+  '/bar-order-cancel',
   '/bar-guest',
   '/bar-cart',
   '/bar-order',
