@@ -287,6 +287,10 @@ function ApplePayButton({
     }
 
     console.log("Starting Apple Pay session");
+    console.log("Apple Pay Debug:", {
+  amountCents,
+  displayAmount: (amountCents / 100).toFixed(2),
+});
     setProcessing(true);
 
     const request: any = {
