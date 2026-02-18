@@ -41,7 +41,7 @@ declare global {
   }
 }
 
-// ✅ FIXED Apple Pay Component - TypeScript Safe
+// ✅ FIXED Apple Pay Component - TypeScript Safe + Amount Fix
 function ApplePayButton({ 
   amountCents, 
   onSuccess 
@@ -74,10 +74,11 @@ function ApplePayButton({
   }, []);
 
   const startApplePay = useCallback(async () => {
-    // 🛑 Multiple validation checks
+    // ✅ FIXED: Multiple validation checks + safe amount handling
     if (state !== 'idle' || !window.ApplePaySession) return;
     
-    if (amountCents < 1) {
+    const safeAmountCents = Math.round(amountCents);
+    if (safeAmountCents < 1) {
       console.log("❌ Apple Pay rejected - Invalid amount:", amountCents);
       setState('error');
       setError("Payment amount too low");
@@ -90,7 +91,7 @@ function ApplePayButton({
       return;
     }
 
-    console.log("🚀 Starting Apple Pay - Amount:", amountCents / 100);
+    console.log("🚀 Starting Apple Pay - Amount:", safeAmountCents / 100);
     setState('processing'); 
     setError(""); 
     setSession(null);
@@ -100,7 +101,7 @@ function ApplePayButton({
       currencyCode: "CAD",
       total: { 
         label: "Casa Mezcal", 
-        amount: (amountCents / 100).toFixed(2)
+        amount: (safeAmountCents / 100).toFixed(2)
       },
       merchantCapabilities: ["supports3DS"],
       supportedNetworks: ["visa", "masterCard", "amex", "discover"],
@@ -140,13 +141,12 @@ function ApplePayButton({
         const chargeResponse = await fetch("/api/apple-pay/charge", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, amount: amountCents, currency: "cad" }),
+          body: JSON.stringify({ token, amount: safeAmountCents, currency: "cad" }),
         });
         const chargeData = await chargeResponse.json();
         console.log("💰 Charge response:", chargeData);
         
         if (chargeData.status === "success" && chargeData.transaction_id) {
-          // ✅ FIXED: Use numeric constants (TypeScript safe)
           newSession.completePayment(1); // STATUS_SUCCESS
           setState('idle'); 
           setSession(null); 
@@ -269,7 +269,7 @@ function NewCardPaymentForm({
             style: {
               base: { 
                 fontSize: "16px", 
-                color: "#1f2933", 
+                color: "#1f2937", 
                 "::placeholder": { color: "#9ca3af" } 
               },
             },
@@ -298,7 +298,7 @@ function NewCardPaymentForm({
   );
 }
 
-// ✅ MAIN CART COMPONENT - FULLY FIXED
+// ✅ MAIN CART COMPONENT - FULLY FIXED WITH SAFE CALCULATIONS
 export default function Cart() {
   const router = useRouter();
 
@@ -381,13 +381,16 @@ export default function Cart() {
     fetchWalletBalance();
   }, [userId, fetchCart, fetchWalletBalance]);
 
-  // ✅ FIXED CALCULATIONS - Always positive amounts
+  // ✅ FIXED CALCULATIONS - Safe floating point handling
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
   const taxes = cartTotal * 0.13;
-  const baseTotal = cartTotal + taxes + tipValue;
+  const baseTotalRaw = cartTotal + taxes + tipValue;
+  const baseTotal = Math.round(baseTotalRaw * 100) / 100; // ✅ Round to 2 decimals
   const walletAmountToUse = Math.min(walletBalance, baseTotal);
-  const remainingAmount = Math.max(0, baseTotal - walletBalance); // ✅ Always >= 0
+  const remainingAmountRaw = baseTotal - walletBalance;
+  const remainingAmount = Math.max(0, Math.round(remainingAmountRaw * 100) / 100); // ✅ Safe positive amount
   const finalTotalAmount = baseTotal.toFixed(2);
+  const remainingAmountCents = Math.round(remainingAmount * 100); // ✅ Safe for Apple Pay
 
   // Cart actions
   const removeItem = async (itemId: string) => {
@@ -772,8 +775,8 @@ export default function Cart() {
                   {remainingAmount > 0 ? `Card ($${remainingAmount.toFixed(2)} + Cash)` : "Card"}
                 </button>
 
-                {/* ✅ FIXED: Only show Apple Pay when needed */}
-                {remainingAmount > 0.01 && (
+                {/* ✅ FIXED: Only show Apple Pay when needed + safe amount */}
+                {remainingAmount > 0.01 && remainingAmountCents >= 1 && (
                   <button
                     type="button"
                     onClick={() => setPayMode("apple_pay")}
@@ -799,11 +802,11 @@ export default function Cart() {
                 />
               )}
 
-              {/* ✅ FIXED Apple Pay Button */}
-              {payMode === "apple_pay" && remainingAmount > 0.01 && (
+              {/* ✅ FIXED Apple Pay Button - Safe amount */}
+              {payMode === "apple_pay" && remainingAmount > 0.01 && remainingAmountCents >= 1 && (
                 <div className="mt-4">
                   <ApplePayButton
-                    amountCents={Math.round(remainingAmount * 100)}
+                    amountCents={remainingAmountCents}
                     onSuccess={(transactionId) =>
                       createLiquidityOrder(transactionId, walletAmountToUse, "1")
                     }
