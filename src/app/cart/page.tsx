@@ -464,7 +464,7 @@ function ApplePayButton({
           Processing Apple Pay…
         </>
       ) : (
-        <> Pay with Apple Pay</>
+        <> Pay with Apple Pay Now</>
       )}
     </button>
   );
