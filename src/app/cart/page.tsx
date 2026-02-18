@@ -40,63 +40,7 @@ interface OldOrder {
   status: string;
 }
 
-interface SavedCard {
-  id: string;
-  stripe_payment_method_id: string;
-  brand: string;
-  last4: string;
-  exp_month: number;
-  exp_year: number;
-}
-
-type PayMode = "wallet" | "new_card" | "saved_card" | "apple_pay";
-
-/* ---------- Saved cards ---------- */
-
-function SavedCardSelector({
-  cards,
-  selectedId,
-  onSelect,
-}: {
-  cards: SavedCard[];
-  selectedId: string | null;
-  onSelect: (card: SavedCard) => void;
-}) {
-  if (!cards.length) {
-    return (
-      <p className="text-sm text-gray-500 mt-2">
-        No saved cards found. Use a new card to save one.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2 mt-3">
-      <h4 className="text-sm font-semibold">Saved cards</h4>
-      {cards.map((card) => (
-        <button
-          key={card.id}
-          type="button"
-          onClick={() => onSelect(card)}
-          className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-left ${
-            selectedId === card.id
-              ? "border-primary bg-primary/5"
-              : "border-gray-200"
-          }`}
-        >
-          <div>
-            <p className="text-sm font-medium capitalize">
-              {card.brand} •••• {card.last4}
-            </p>
-            <p className="text-xs text-gray-500">
-              Expires {card.exp_month}/{card.exp_year}
-            </p>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
+type PayMode = "wallet" | "new_card" | "apple_pay";
 
 /* ---------- New card (Stripe Elements) ---------- */
 
@@ -190,7 +134,7 @@ function NewCardPaymentForm({
   );
 }
 
-/* ---------- Apple Pay JS (FIXED VERSION) ---------- */
+/* ---------- Apple Pay JS ---------- */
 
 declare global {
   interface Window {
@@ -209,7 +153,6 @@ function ApplePayButton({
   const [processing, setProcessing] = useState(false);
   const [session, setSession] = useState<any>(null);
 
-  // Cleanup previous session on unmount
   useEffect(() => {
     return () => {
       if (session) {
@@ -227,7 +170,6 @@ function ApplePayButton({
   }, []);
 
   const startApplePay = useCallback(async () => {
-    // Prevent multiple calls
     if (processing || !window.ApplePaySession || session) {
       console.log("Apple Pay blocked: already processing or session active");
       return;
@@ -359,13 +301,15 @@ function ApplePayButton({
           Processing Apple Pay…
         </>
       ) : (
-        <> Pay with Apple Pay</>
+        <>
+          <span>🍎</span> Pay with Apple Pay
+        </>
       )}
     </button>
   );
 }
 
-/* ---------- Main Cart (FIXED VERSION) ---------- */
+/* ---------- Main Cart ---------- */
 
 export default function Cart() {
   const router = useRouter();
@@ -387,9 +331,6 @@ export default function Cart() {
   const [deviceId, setDeviceId] = useState("web");
 
   const [payMode, setPayMode] = useState<PayMode>("wallet");
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-  const [selectedSavedCard, setSelectedSavedCard] =
-    useState<SavedCard | null>(null);
 
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletLoading, setWalletLoading] = useState(true);
@@ -397,7 +338,7 @@ export default function Cart() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initializingPayment, setInitializingPayment] = useState(false);
 
-  // NEW: Apple Pay stabilization
+  // Apple Pay stabilization
   const [applePayReady, setApplePayReady] = useState(false);
 
   useEffect(() => {
@@ -408,10 +349,14 @@ export default function Cart() {
     if (storedDevice) setDeviceId(storedDevice);
   }, []);
 
-  // Apple Pay ready state management
+  // Apple Pay ready state - 500ms delay for stability
   useEffect(() => {
     if (payMode === "apple_pay") {
-      const timer = setTimeout(() => setApplePayReady(true), 100);
+      const timer = setTimeout(() => {
+        if (typeof window !== "undefined" && window.ApplePaySession) {
+          setApplePayReady(true);
+        }
+      }, 500);
       return () => clearTimeout(timer);
     } else {
       setApplePayReady(false);
@@ -494,37 +439,12 @@ export default function Cart() {
     }
   }, [userId]);
 
-  const fetchSavedCards = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch("/api/savecard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (
-        (data.status === "1" || data.status === 1) &&
-        Array.isArray(data.cards)
-      ) {
-        setSavedCards(data.cards);
-      } else {
-        setSavedCards([]);
-      }
-    } catch (err) {
-      console.error("Saved card fetch error:", err);
-      setSavedCards([]);
-    }
-  }, [userId]);
-
   useEffect(() => {
     if (!userId) return;
     fetchCart();
     fetchOldOrders();
     fetchWalletBalance();
-    fetchSavedCards();
-  }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance, fetchSavedCards]);
+  }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance]);
 
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
   const taxes = cartTotal * 0.13;
@@ -719,52 +639,6 @@ export default function Cart() {
     }
   };
 
-  const payWithSavedCard = async () => {
-    if (!selectedSavedCard || !userId || !activePickup) {
-      alert("Please select a saved card and pickup location.");
-      return;
-    }
-    if (remainingAmount <= 0) {
-      await payWithWallet();
-      return;
-    }
-
-    const customerId = localStorage.getItem("stripe_customer_id") || "";
-    if (!customerId) {
-      alert("Stripe customer not found.");
-      return;
-    }
-
-    const amount = Math.round(remainingAmount * 100);
-
-    try {
-      const res = await fetch("/api/pay-with-saved-card", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          currency: "cad",
-          customerId,
-          paymentMethodId: selectedSavedCard.stripe_payment_method_id,
-          wallet_used: walletAmountToUse,
-        }),
-      });
-      const data = await res.json();
-      if (data.status === "success" && data.payment_intent_id) {
-        await createLiquidityOrder(
-          data.payment_intent_id,
-          walletAmountToUse,
-          "1"
-        );
-      } else {
-        alert(data.message || "Payment failed.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Payment failed.");
-    }
-  };
-
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
@@ -781,8 +655,6 @@ export default function Cart() {
               setShowAcknowledgement(false);
               if (payMode === "wallet") {
                 await payWithWallet();
-              } else if (payMode === "saved_card") {
-                await payWithSavedCard();
               } else if (payMode === "new_card") {
                 await initStripePaymentIntent();
               }
@@ -797,8 +669,6 @@ export default function Cart() {
               setShowAcknowledgement(false);
               if (payMode === "wallet") {
                 await payWithWallet();
-              } else if (payMode === "saved_card") {
-                await payWithSavedCard();
               } else if (payMode === "new_card") {
                 await initStripePaymentIntent();
               }
@@ -817,7 +687,6 @@ export default function Cart() {
     </div>
   );
 
-  // FIXED: Skip Apple Pay from main checkout (uses own button)
   const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
     
@@ -832,8 +701,6 @@ export default function Cart() {
 
     if (payMode === "wallet") {
       await payWithWallet();
-    } else if (payMode === "saved_card") {
-      await payWithSavedCard();
     } else if (payMode === "new_card") {
       await initStripePaymentIntent();
     }
@@ -978,8 +845,9 @@ export default function Cart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* Payment Mode */}
+              {/* SIMPLIFIED Payment Mode - NO SAVED CARDS */}
               <div className="mt-6 grid grid-cols-1 gap-3">
+                {/* Wallet */}
                 <button
                   type="button"
                   onClick={() => setPayMode("wallet")}
@@ -1000,6 +868,7 @@ export default function Cart() {
                       )} available)`}
                 </button>
 
+                {/* New Card */}
                 <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
@@ -1014,27 +883,20 @@ export default function Cart() {
                     : "Card"}
                 </button>
 
+                {/* Apple Pay */}
                 <button
                   type="button"
                   onClick={() => setPayMode("apple_pay")}
-                  className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
+                  className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center gap-1 ${
                     payMode === "apple_pay"
                       ? "bg-black text-white border-black shadow-lg"
                       : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
                   }`}
                 >
-                   Apple Pay
+                  <span>🍎</span>
+                  Apple Pay
                 </button>
               </div>
-
-              {/* Saved Cards */}
-              {payMode === "saved_card" && (
-                <SavedCardSelector
-                  cards={savedCards}
-                  selectedId={selectedSavedCard?.id || null}
-                  onSelect={(card) => setSelectedSavedCard(card)}
-                />
-              )}
 
               {/* New Card Form */}
               {payMode === "new_card" && clientSecret && (
@@ -1051,19 +913,26 @@ export default function Cart() {
                 />
               )}
 
-              {/* FIXED Apple Pay - Only render when ready + stable */}
-              {payMode === "apple_pay" && remainingAmount > 0 && applePayReady && (
-                <div className="mt-4">
-                  <ApplePayButton
-                    amountCents={Math.round(remainingAmount * 100)}
-                    onSuccess={(transactionId) =>
-                      createLiquidityOrder(
-                        transactionId,
-                        walletAmountToUse,
-                        "1"
-                      )
-                    }
-                  />
+              {/* Apple Pay Button - Stable render */}
+              {payMode === "apple_pay" && remainingAmount > 0 && (
+                <div className="mt-6">
+                  {!applePayReady ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      <span>Preparing Apple Pay...</span>
+                    </div>
+                  ) : (
+                    <ApplePayButton
+                      amountCents={Math.round(remainingAmount * 100)}
+                      onSuccess={(transactionId) =>
+                        createLiquidityOrder(
+                          transactionId,
+                          walletAmountToUse,
+                          "1"
+                        )
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1080,6 +949,7 @@ export default function Cart() {
 
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
+              {/* Wallet Checkout */}
               {payMode === "wallet" && (
                 <button
                   type="submit"
@@ -1109,6 +979,7 @@ export default function Cart() {
                 </button>
               )}
 
+              {/* New Card Checkout */}
               {payMode === "new_card" && !clientSecret && (
                 <button
                   type="submit"
@@ -1137,32 +1008,6 @@ export default function Cart() {
                   )}
                 </button>
               )}
-
-              {payMode === "saved_card" && (
-                <button
-                  type="submit"
-                  disabled={
-                    !selectedSavedCard ||
-                    !activePickup ||
-                    cartItems.length === 0
-                  }
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    !selectedSavedCard ||
-                    !activePickup ||
-                    cartItems.length === 0
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
-                  }`}
-                >
-                  {remainingAmount > 0
-                    ? `Pay $${remainingAmount.toFixed(
-                        2
-                      )} with Saved Card (Cash applied)`
-                    : `Pay Full $${finalTotalAmount} with Liquidity Cash`}
-                </button>
-              )}
-
-              {/* No checkout button for Apple Pay - uses its own */}
             </form>
           </div>
         </div>
