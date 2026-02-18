@@ -278,6 +278,9 @@ function ApplePayButton({
 
   const startApplePay = useCallback(async () => {
     // Prevent multiple calls
+
+    let isSessionActive = true;
+
     if (processing || !window.ApplePaySession || session) {
       console.log("Apple Pay blocked: already processing or session active");
       return;
@@ -328,51 +331,105 @@ function ApplePayButton({
     };
 
     newSession.onpaymentauthorized = async (event: any) => {
-      console.log("Apple Pay: processing payment");
-      try {
-        const token = event.payment.token?.paymentData;
-        if (!token) {
-          console.error("No Apple Pay token");
+  console.log("Apple Pay: processing payment");
+
+  if (!isSessionActive) return;
+
+  try {
+    const token = event.payment.token?.paymentData;
+
+    if (!token) {
+      console.error("No Apple Pay token");
+
+      if (isSessionActive) {
+        try {
           newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-          setProcessing(false);
-          setSession(null);
-          return;
+        } catch (e) {
+          console.log("Session already closed (token missing)");
         }
+      }
 
-        const res = await fetch("/api/apple-pay/charge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token,
-            amount: amountCents,
-          }),
-        });
-
-        const data = await res.json();
-        console.log("Apple Pay charge response:", data);
-
-        if (data.status === "success" && data.transaction_id) {
-          newSession.completePayment(window.ApplePaySession.STATUS_SUCCESS);
-          setProcessing(false);
-          setSession(null);
-          await onSuccess(data.transaction_id);
-        } else {
-          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-          setProcessing(false);
-          setSession(null);
-          alert(data.message || "Apple Pay payment failed.");
-        }
-      } catch (err) {
-        console.error("Apple Pay charge error:", err);
-        newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+      if (isSessionActive) {
         setProcessing(false);
         setSession(null);
-        alert("Apple Pay payment failed.");
       }
-    };
+
+      return;
+    }
+
+    const res = await fetch("/api/apple-pay/charge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        amount: amountCents,
+      }),
+    });
+
+    if (!isSessionActive) return;
+
+    const data = await res.json();
+    console.log("Apple Pay charge response:", data);
+
+    if (data.status === "success" && data.transaction_id) {
+
+      if (isSessionActive) {
+        try {
+          newSession.completePayment(window.ApplePaySession.STATUS_SUCCESS);
+        } catch (e) {
+          console.log("Session already closed (success)");
+        }
+      }
+
+      if (isSessionActive) {
+        setProcessing(false);
+        setSession(null);
+      }
+
+      await onSuccess(data.transaction_id);
+
+    } else {
+
+      if (isSessionActive) {
+        try {
+          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+        } catch (e) {
+          console.log("Session already closed (failure)");
+        }
+      }
+
+      if (isSessionActive) {
+        setProcessing(false);
+        setSession(null);
+      }
+
+      alert(data.message || "Apple Pay payment failed.");
+    }
+
+  } catch (err) {
+    console.error("Apple Pay charge error:", err);
+
+    if (isSessionActive) {
+      try {
+        newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+      } catch (e) {
+        console.log("Session already closed (exception)");
+      }
+    }
+
+    if (isSessionActive) {
+      setProcessing(false);
+      setSession(null);
+    }
+
+    alert("Apple Pay payment failed.");
+  }
+};
+
 
     newSession.oncancel = () => {
       console.log("Apple Pay: cancelled by user");
+      isSessionActive = false;
       setProcessing(false);
       setSession(null);
     };
