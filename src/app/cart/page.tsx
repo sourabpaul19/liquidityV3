@@ -425,8 +425,6 @@ function ApplePayButton({
     alert("Apple Pay payment failed.");
   }
 };
-
-
     newSession.oncancel = () => {
       console.log("Apple Pay: cancelled by user");
       isSessionActive = false;
