@@ -10,6 +10,7 @@ import {
   CardElement,
   useStripe,
   useElements,
+  PaymentRequestButtonElement,
 } from "@stripe/react-stripe-js";
 
 import styles from "./cart.module.scss";
@@ -17,6 +18,7 @@ import Header from "@/components/common/Header/Header";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
 import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
+import stripe from "stripe";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -33,211 +35,120 @@ interface CartItem {
   special_instruction?: string;
 }
 
+interface OldOrder {
+  id: string;
+  unique_id: string;
+  order_date: string;
+  status: string;
+}
+
+
 type PayMode = "wallet" | "new_card" | "apple_pay";
 
-declare global {
-  interface Window {
-    ApplePaySession?: any;
-  }
-}
+/* ---------- Saved cards ---------- */
+function StripeApplePayWrapper({
+  payMode,
+  remainingAmount,
+  walletAmountToUse,
+  createLiquidityOrder,
+}: any) {
+  const stripe = useStripe();
 
-// 🔥 BULLETPROOF Apple Pay Component - FIXED negative amount issue
-function ApplePayButton({ 
-  amountCents, 
-  displayAmount,
-  onSuccess 
-}: { 
-  amountCents: number; 
-  displayAmount: string;
-  onSuccess: (transactionId: string) => Promise<void>; 
-}) {
-  const [state, setState] = useState<'idle' | 'processing' | 'error'>('idle');
-  const [session, setSession] = useState<any>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    return () => { 
-      if (session) try { session.abort(); } catch {} 
-    };
-  }, [session]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.ApplePaySession) {
-      setState('error'); 
-      setError("Apple Pay not supported"); 
-      return; 
-    }
-    if (window.ApplePaySession.canMakePayments()) {
-      setState('idle');
-    } else {
-      setState('error'); 
-      setError("Apple Pay not available"); 
-    }
-  }, []);
-
-  const startApplePay = useCallback(async () => {
-  if (state !== 'idle' || !window.ApplePaySession) return;
-  
-  // 🔥 BULLETPROOF FIX - Handle -0 and any negative/zero edge case
-  let safeAmountCents = Number(amountCents);
-  console.log("🔧 RAW INPUT:", amountCents, "typeof:", typeof amountCents);
-  
-  // Force positive + handle -0
-  safeAmountCents = safeAmountCents <= 0 ? 3421 : Math.floor(safeAmountCents);
-  safeAmountCents = Math.max(3421, safeAmountCents); // Minimum $34.21
-  
-  console.log("✅ FORCED POSITIVE:", safeAmountCents, safeAmountCents/100);
-  console.log("✅ DISPLAY AMOUNT:", (safeAmountCents/100).toFixed(2));
-  
-  if (safeAmountCents < 1) {
-    setState('error');
-    setError("Payment amount invalid");
-    return;
-  }
-  
-  if (!window.ApplePaySession.canMakePayments()) {
-    setState('error');
-    setError("Apple Pay unavailable");
-    return;
-  }
-
-  setState('processing'); 
-  setError(""); 
-  setSession(null);
-
-  const paymentRequest = {
-    countryCode: "CA",
-    currencyCode: "CAD",
-    total: { 
-      label: "Casa Mezcal", 
-      amount: (safeAmountCents / 100).toFixed(2) // Guaranteed positive string
-    },
-    merchantCapabilities: ["supports3DS"],
-    supportedNetworks: ["visa", "masterCard", "amex", "discover"],
-  };
-
-  console.log("📋 FINAL PAYMENT REQUEST:", paymentRequest);
-
-  const newSession = new window.ApplePaySession(4, paymentRequest);
-  setSession(newSession);
-
-    newSession.onvalidatemerchant = async (event: any) => {
-  console.log("🔐 === MERCHANT VALIDATION START ===");
-  console.log("🔐 Validation URL:", event.validationURL);
-  console.log("🔐 Domain:", window.location.hostname);
-  
-  try {
-    const response = await fetch("/api/apple-pay/validate-merchant", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        validationURL: event.validationURL,
-        domainName: window.location.hostname 
-      }),
-    });
-    
-    console.log("📡 BACKEND STATUS:", response.status);
-    console.log("📡 BACKEND OK?", response.ok);
-    
-    const responseText = await response.text();
-    console.log("📡 RAW RESPONSE:", responseText);
-    
-    if (!response.ok) {
-      console.error("❌ HTTP ERROR", response.status, responseText);
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const merchantSession = JSON.parse(responseText);
-    console.log("✅ MERCHANT SESSION:", merchantSession);
-    console.log("✅ Keys in response:", Object.keys(merchantSession));
-    
-    // Verify required fields exist
-    if (!merchantSession.merchantSessionIdentifier) {
-      console.error("❌ MISSING merchantSessionIdentifier");
-      throw new Error("Invalid merchant session");
-    }
-    
-    newSession.completeMerchantValidation(merchantSession);
-    console.log("🔓 VALIDATION COMPLETE");
-    
-  } catch (err: any) {
-    console.error("💥 VALIDATION FAILED:", err.message);
-    console.error("💥 FULL ERROR:", err);
-    newSession.abort();
-    setState('error');
-    setError("Merchant validation failed - check console");
-    setSession(null);
-  }
-};
-
-
-    newSession.onpaymentauthorized = async (event: any) => {
-      console.log("💳 Processing Apple Pay payment");
-      const token = event.payment.token.paymentData;
-      try {
-        const chargeResponse = await fetch("/api/apple-pay/charge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, amount: safeAmountCents, currency: "cad" }),
-        });
-        const chargeData = await chargeResponse.json();
-        console.log("💰 Charge response:", chargeData);
-        
-        if (chargeData.status === "success" && chargeData.transaction_id) {
-          newSession.completePayment(1);
-          setState('idle'); 
-          setSession(null); 
-          await onSuccess(chargeData.transaction_id);
-        } else {
-          newSession.completePayment(2);
-          setState('error'); 
-          setError(chargeData.message || "Payment failed");
-        }
-      } catch (err: any) {
-        console.error("💥 Payment error:", err);
-        newSession.completePayment(2);
-        setState('error'); 
-        setError("Payment processing failed");
-      }
-    };
-
-    newSession.oncancel = () => { 
-      console.log("❌ Cancelled by user"); 
-      setState('idle'); 
-      setSession(null); 
-    };
-
-    newSession.begin();
-  }, [amountCents, onSuccess, state]);
-
-  if (state === 'processing') {
-    return (
-      <button disabled className="py-3 px-4 rounded-lg bg-gray-400 text-gray-200 w-full flex items-center justify-center gap-2">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        Processing Apple Pay…
-      </button>
-    );
-  }
-
-  if (state === 'error') {
-    return (
-      <button disabled className="py-3 px-4 rounded-lg bg-gray-200 text-gray-500 w-full text-sm" title={error}>
-        {error || "Apple Pay unavailable"}
-      </button>
-    );
-  }
+  if (payMode !== "apple_pay") return null;
+  if (!stripe) return null;
+  if (remainingAmount <= 0) return null;
 
   return (
-    <button
-      type="button"
-      id="apple-pay-button"
-      onClick={startApplePay}
-      className="py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full bg-black text-white border-black shadow-lg hover:bg-gray-900 active:scale-[0.98] transition-all"
-    >
-       Pay {displayAmount}
-    </button>
+    <div className="mt-4">
+      <StripeApplePayButton
+        stripe={stripe}
+        amount={remainingAmount}
+        onSuccess={(paymentIntentId) =>
+          createLiquidityOrder(
+            paymentIntentId,
+            walletAmountToUse,
+            "1"
+          )
+        }
+      />
+    </div>
   );
 }
+
+function StripeApplePayButton({
+  stripe,
+  amount,
+  onSuccess,
+}: {
+  stripe: any;
+  amount: number;
+  onSuccess: (id: string) => Promise<void>;
+}) {
+  const [paymentRequest, setPaymentRequest] = useState<any>(null);
+
+  useEffect(() => {
+    if (!stripe || amount <= 0) return;
+
+    const pr = stripe.paymentRequest({
+      country: "CA",
+      currency: "cad",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: Math.round(amount * 100),
+      },
+      requestPayerName: true,
+      requestPayerEmail: true,
+    });
+
+    pr.canMakePayment().then((result: any) => {
+      if (result) setPaymentRequest(pr);
+    });
+
+    pr.on("paymentmethod", async (ev: any) => {
+      try {
+        const res = await fetch("/api/create-payment-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: Math.round(amount * 100),
+            currency: "cad",
+          }),
+        });
+
+        const data = await res.json();
+
+        const { paymentIntent, error } = await stripe.confirmCardPayment(
+          data.client_secret,
+          { payment_method: ev.paymentMethod.id },
+          { handleActions: false }
+        );
+
+        if (error) {
+          ev.complete("fail");
+          return;
+        }
+
+        ev.complete("success");
+
+        if (paymentIntent.status === "requires_action") {
+          await stripe.confirmCardPayment(data.client_secret);
+        }
+
+        await onSuccess(paymentIntent.id);
+      } catch (err) {
+        console.error("Stripe Apple Pay error:", err);
+        ev.complete("fail");
+      }
+    });
+  }, [stripe, amount, onSuccess]);
+
+  if (!paymentRequest) return null;
+
+  return <PaymentRequestButtonElement options={{ paymentRequest }} />;
+}
+
+
+/* ---------- New card (Stripe Elements) ---------- */
 
 function NewCardPaymentForm({
   clientSecret,
@@ -257,29 +168,35 @@ function NewCardPaymentForm({
     if (!stripe || !elements || !clientSecret) return;
 
     setProcessing(true);
+
     const cardElement = elements.getElement(CardElement);
-    if (!cardElement) { 
-      setProcessing(false); 
-      return; 
+    if (!cardElement) {
+      setProcessing(false);
+      return;
     }
 
-    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: cardElement,
-        billing_details: {
-          name: localStorage.getItem("user_name") || "",
-          email: localStorage.getItem("user_email") || "",
+    const { error, paymentIntent } = await stripe.confirmCardPayment(
+      clientSecret,
+      {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: localStorage.getItem("user_name") || "",
+            email: localStorage.getItem("user_email") || "",
+          },
         },
-      },
-    });
+      }
+    );
 
     setProcessing(false);
+
     if (error) {
-      console.error("Stripe error:", error);
+      console.error("Stripe card error:", error);
       alert(error.message || "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded") {
+
+    if (paymentIntent && paymentIntent.status === "succeeded") {
       await onSuccess(paymentIntent.id);
     } else {
       alert("Payment did not complete.");
@@ -292,10 +209,10 @@ function NewCardPaymentForm({
         <CardElement
           options={{
             style: {
-              base: { 
-                fontSize: "16px", 
-                color: "#1f2937", 
-                "::placeholder": { color: "#9ca3af" } 
+              base: {
+                fontSize: "16px",
+                color: "#1f2933",
+                "::placeholder": { color: "#9ca3af" },
               },
             },
           }}
@@ -304,10 +221,10 @@ function NewCardPaymentForm({
       <button
         type="submit"
         disabled={!stripe || !clientSecret || processing}
-        className={`w-full py-3 px-4 rounded-lg font-medium transition-all ${
+        className={`w-full py-3 px-4 rounded-lg font-medium transition ${
           !stripe || !clientSecret || processing
             ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-            : "bg-primary text-white hover:bg-primary/90 shadow-lg"
+            : "bg-primary text-white hover:bg-primary/90"
         }`}
       >
         {processing ? (
@@ -323,27 +240,214 @@ function NewCardPaymentForm({
   );
 }
 
+/* ---------- Apple Pay JS (FIXED VERSION) ---------- */
+
+declare global {
+  interface Window {
+    ApplePaySession?: any;
+  }
+}
+
+function ApplePayButton({
+  amountCents,
+  onSuccess,
+}: {
+  amountCents: number;
+  onSuccess: (transactionId: string) => Promise<void>;
+}) {
+  const [supported, setSupported] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  // Cleanup previous session on unmount
+  useEffect(() => {
+    return () => {
+      if (session) {
+        session.abort();
+      }
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.ApplePaySession) return;
+    
+    const canPay = window.ApplePaySession.canMakePayments();
+    if (canPay) setSupported(true);
+  }, []);
+
+  const startApplePay = useCallback(async () => {
+    // Prevent multiple calls
+    if (processing || !window.ApplePaySession || session) {
+      console.log("Apple Pay blocked: already processing or session active");
+      return;
+    }
+
+    console.log("Starting Apple Pay session");
+    setProcessing(true);
+
+    const request: any = {
+      countryCode: "CA",
+      currencyCode: "CAD",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: (amountCents / 100).toFixed(2),
+      },
+      merchantCapabilities: ["supports3DS"],
+      supportedNetworks: ["visa", "masterCard", "amex"],
+    };
+
+    const newSession = new window.ApplePaySession(3, request);
+    setSession(newSession);
+
+    newSession.onvalidatemerchant = async (event: any) => {
+      console.log("Apple Pay: validating merchant");
+      try {
+        const res = await fetch("/api/apple-pay/validate-merchant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ validationURL: event.validationURL }),
+        });
+        
+        if (!res.ok) {
+          console.error("Merchant validation failed, HTTP", res.status);
+          newSession.abort();
+          setProcessing(false);
+          setSession(null);
+          return;
+        }
+        
+        const merchantSession = await res.json();
+        newSession.completeMerchantValidation(merchantSession);
+      } catch (err) {
+        console.error("Apple Pay merchant validation error:", err);
+        newSession.abort();
+        setProcessing(false);
+        setSession(null);
+      }
+    };
+
+    newSession.onpaymentauthorized = async (event: any) => {
+      console.log("Apple Pay: processing payment");
+      try {
+        const token = event.payment.token?.paymentData;
+        if (!token) {
+          console.error("No Apple Pay token");
+          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+          setProcessing(false);
+          setSession(null);
+          return;
+        }
+
+        const res = await fetch("/api/apple-pay/charge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token,
+            amount: amountCents,
+          }),
+        });
+
+        const data = await res.json();
+        console.log("Apple Pay charge response:", data);
+
+        if (data.status === "success" && data.transaction_id) {
+          newSession.completePayment(window.ApplePaySession.STATUS_SUCCESS);
+          setProcessing(false);
+          setSession(null);
+          await onSuccess(data.transaction_id);
+        } else {
+          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+          setProcessing(false);
+          setSession(null);
+          alert(data.message || "Apple Pay payment failed.");
+        }
+      } catch (err) {
+        console.error("Apple Pay charge error:", err);
+        newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+        setProcessing(false);
+        setSession(null);
+        alert("Apple Pay payment failed.");
+      }
+    };
+
+    newSession.oncancel = () => {
+      console.log("Apple Pay: cancelled by user");
+      setProcessing(false);
+      setSession(null);
+    };
+
+    newSession.begin();
+  }, [amountCents, onSuccess, processing, session]);
+
+  if (!supported) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="py-3 px-4 rounded-lg font-medium border bg-gray-200 text-gray-500 w-full"
+      >
+        Apple Pay not available on this device
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startApplePay}
+      disabled={processing}
+      className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full ${
+        processing
+          ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+          : "bg-black text-white border-black shadow-lg hover:bg-gray-900"
+      }`}
+    >
+      {processing ? (
+        <>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          Processing Apple Pay…
+        </>
+      ) : (
+        <> Pay with Apple Pay</>
+      )}
+    </button>
+  );
+}
+
+/* ---------- Main Cart (FIXED VERSION) ---------- */
+
 export default function Cart() {
   const router = useRouter();
 
-  // State
   const [userId, setUserId] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+
   const [activePickup, setActivePickup] = useState<string | null>(null);
+  const [oldOrders, setOldOrders] = useState<OldOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
+
   const [showAcknowledgement, setShowAcknowledgement] = useState(false);
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
+
   const [deviceId, setDeviceId] = useState("web");
+
   const [payMode, setPayMode] = useState<PayMode>("wallet");
+
+
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletLoading, setWalletLoading] = useState(true);
+
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initializingPayment, setInitializingPayment] = useState(false);
 
-  // Initialize from localStorage
+  // NEW: Apple Pay stabilization
+  const [applePayReady, setApplePayReady] = useState(false);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedUser = localStorage.getItem("user_id");
@@ -351,6 +455,16 @@ export default function Cart() {
     const storedDevice = localStorage.getItem("device_id");
     if (storedDevice) setDeviceId(storedDevice);
   }, []);
+
+  // Apple Pay ready state management
+  useEffect(() => {
+    if (payMode === "apple_pay") {
+      const timer = setTimeout(() => setApplePayReady(true), 100);
+      return () => clearTimeout(timer);
+    } else {
+      setApplePayReady(false);
+    }
+  }, [payMode]);
 
   const fetchCart = useCallback(async () => {
     if (!userId) return;
@@ -376,6 +490,36 @@ export default function Cart() {
     }
   }, [userId, deviceId]);
 
+  const fetchOldOrders = useCallback(async () => {
+    if (!userId) return;
+    setLoadingOrders(true);
+    try {
+      const res = await fetch(
+        `https://dev2024.co.in/web/liquidity-backend/admin/api/orderList/${userId}`
+      );
+      const data = await res.json();
+      if (
+        (data.status === "1" || data.status === 1) &&
+        Array.isArray(data.orders)
+      ) {
+        const filtered = data.orders.filter(
+          (order: OldOrder) =>
+            order.status === "0" ||
+            order.status === "1" ||
+            order.status === "2"
+        );
+        setOldOrders(filtered);
+      } else {
+        setOldOrders([]);
+      }
+    } catch (err) {
+      console.error("Order fetch error:", err);
+      setOldOrders([]);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [userId]);
+
   const fetchWalletBalance = useCallback(async () => {
     if (!userId) return;
     setWalletLoading(true);
@@ -398,30 +542,20 @@ export default function Cart() {
     }
   }, [userId]);
 
+
+
   useEffect(() => {
     if (!userId) return;
     fetchCart();
+    fetchOldOrders();
     fetchWalletBalance();
-  }, [userId, fetchCart, fetchWalletBalance]);
+  }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance,]);
 
-  // 🔥 BULLETPROOF CALCULATIONS - NO MORE NEGATIVE AMOUNTS
-  const tipValueRaw = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
-  const tipValue = Math.max(0, Math.round(tipValueRaw * 100) / 100);
-  const taxesRaw = cartTotal * 0.13;
-  const taxes = Math.round(taxesRaw * 100) / 100;
-  
-  const baseTotalRaw = cartTotal + taxes + tipValue;
-  const baseTotal = Math.round(baseTotalRaw * 100) / 100;
-  
-  const walletAmountToUseRaw = Math.min(walletBalance, baseTotal);
-  const walletAmountToUse = Math.round(walletAmountToUseRaw * 100) / 100;
-  
-  // 🔥 CRITICAL FIX: Always positive remaining amount
-  const remainingAmountRawCalc = baseTotal - walletBalance;
-  const remainingAmount = Math.max(0, Math.round(Math.abs(remainingAmountRawCalc) * 100) / 100);
-  const remainingAmountCents = Math.max(1, Math.round(remainingAmount * 100));
-  const remainingDisplay = remainingAmount.toFixed(2);
-  
+  const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
+  const taxes = cartTotal * 0.13;
+  const baseTotal = cartTotal + taxes + tipValue;
+  const walletAmountToUse = Math.min(walletBalance, baseTotal);
+  const remainingAmount = Math.max(0, baseTotal - walletBalance);
   const finalTotalAmount = baseTotal.toFixed(2);
 
   const removeItem = async (itemId: string) => {
@@ -458,7 +592,10 @@ export default function Cart() {
       formData.append("quantity", String(newQty));
       const res = await fetch(
         "https://dev2024.co.in/web/liquidity-backend/admin/api/updateCartData",
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          body: formData,
+        }
       );
       const data = await res.json();
       if (data.status === "1" || data.status === 1) {
@@ -489,7 +626,10 @@ export default function Cart() {
     const user_name = localStorage.getItem("user_name") || "";
     const user_email = localStorage.getItem("user_email") || "";
     const user_mobile = localStorage.getItem("user_mobile") || "";
-    const selected_shop = JSON.parse(localStorage.getItem("selected_shop") || "{}");
+
+    const selected_shop = JSON.parse(
+      localStorage.getItem("selected_shop") || "{}"
+    );
     const shop_id = selected_shop?.id || "";
 
     if (!userId || !user_name || !user_email || !user_mobile) {
@@ -506,6 +646,7 @@ export default function Cart() {
     }
 
     const onlineAmount = baseTotal - walletUsed;
+
     const formData = new FormData();
     formData.append("name", user_name);
     formData.append("email", user_email);
@@ -546,11 +687,17 @@ export default function Cart() {
       return;
     }
     if (walletBalance < baseTotal) {
-      alert(`Insufficient Liquidity Cash. Need $${baseTotal.toFixed(2)}, have $${walletBalance.toFixed(2)}`);
+      alert(
+        `Insufficient Liquidity Cash. Need $${baseTotal.toFixed(
+          2
+        )}, have $${walletBalance.toFixed(2)}`
+      );
       return;
     }
     try {
-      const transactionId = `LIQUIDITY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const transactionId = `LIQUIDITY_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
       await createLiquidityOrder(transactionId, baseTotal, "2");
     } catch (err) {
       console.error(err);
@@ -569,7 +716,7 @@ export default function Cart() {
     }
     setInitializingPayment(true);
     try {
-      const amount = remainingAmountCents;
+      const amount = Math.round(remainingAmount * 100);
       const res = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -597,6 +744,8 @@ export default function Cart() {
     }
   };
 
+  
+
   const AcknowledgementPopup = () => (
     <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
@@ -611,8 +760,11 @@ export default function Cart() {
             className="bg-primary text-white p-3 rounded-lg"
             onClick={async () => {
               setShowAcknowledgement(false);
-              if (payMode === "wallet") await payWithWallet();
-              else if (payMode === "new_card") await initStripePaymentIntent();
+              if (payMode === "wallet") {
+                await payWithWallet();
+              } else if (payMode === "new_card") {
+                await initStripePaymentIntent();
+              }
             }}
           >
             I Understand
@@ -622,8 +774,11 @@ export default function Cart() {
             onClick={async () => {
               localStorage.setItem("ack_skip_popup", "1");
               setShowAcknowledgement(false);
-              if (payMode === "wallet") await payWithWallet();
-              else if (payMode === "new_card") await initStripePaymentIntent();
+              if (payMode === "wallet") {
+                await payWithWallet();
+              } else if (payMode === "new_card") {
+                await initStripePaymentIntent();
+              }
             }}
           >
             Yes, Don't Show Again
@@ -639,8 +794,11 @@ export default function Cart() {
     </div>
   );
 
+  // FIXED: Skip Apple Pay from main checkout (uses own button)
   const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
+    
+    // Apple Pay uses its own button - don't process here
     if (payMode === "apple_pay") return;
 
     const skip = localStorage.getItem("ack_skip_popup");
@@ -661,12 +819,12 @@ export default function Cart() {
   return (
     <>
       {showAcknowledgement && <AcknowledgementPopup />}
-      
+
       <Header title="Casa Mezcal" />
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
-          {/* Cart Items */}
+          {/* Cart */}
           {loading ? (
             <p className="p-4 text-center text-gray-500">Loading cart...</p>
           ) : cartItems.length === 0 ? (
@@ -680,17 +838,29 @@ export default function Cart() {
                       {item.product_name} <span>(1oz)</span>
                     </h4>
                     {item.choice_of_mixer_name && (
-                      <p><strong>Choice of mixer:</strong> {item.choice_of_mixer_name}</p>
+                      <p>
+                        <strong>Choice of mixer:</strong>{" "}
+                        {item.choice_of_mixer_name}
+                      </p>
                     )}
                     {item.is_double_shot && (
-                      <p><strong>Additional shots:</strong> {item.shot_count}</p>
+                      <p>
+                        <strong>Additional shots:</strong> {item.shot_count}
+                      </p>
                     )}
                     {item.special_instruction && (
-                      <p><strong>Special Instruction:</strong> {item.special_instruction}</p>
+                      <p>
+                        <strong>Special Instruction:</strong>{" "}
+                        {item.special_instruction}
+                      </p>
                     )}
                   </div>
                   <div className={styles.itemRight}>
-                    <h4>${(Number(item.price) * Number(item.quantity)).toFixed(2)}</h4>
+                    <h4>
+                      {(
+                        Number(item.price) * Number(item.quantity)
+                      ).toFixed(2)}
+                    </h4>
                     <QuantityButton
                       min={0}
                       max={10}
@@ -709,7 +879,7 @@ export default function Cart() {
             </>
           )}
 
-          {/* Pickup Location */}
+          {/* Pickup */}
           <div className={styles.pickupArea}>
             <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
             <div className={`${styles.pickupBlock} flex gap-3`}>
@@ -722,18 +892,25 @@ export default function Cart() {
                   key={loc.id}
                   type="button"
                   onClick={() => setActivePickup(loc.id)}
-                  className={`${styles.pickupItem} ${activePickup === loc.id ? "bg-primary text-white" : ""}`}
+                  className={`${styles.pickupItem} ${
+                    activePickup === loc.id ? "bg-primary text-white" : ""
+                  }`}
                 >
                   {loc.label.split("\n").map((line, i) => (
-                    <span key={i} className="block">{line}</span>
+                    <span key={i} className="block">
+                      {line}
+                    </span>
                   ))}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Billing & Payment */}
-          <Elements stripe={stripePromise} options={clientSecret ? { clientSecret } : undefined}>
+          {/* Billing + Payment */}
+          <Elements
+            stripe={stripePromise}
+            options={clientSecret ? { clientSecret } : undefined}
+          >
             <div className={styles.billingArea}>
               <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
 
@@ -750,7 +927,9 @@ export default function Cart() {
               ) : walletBalance > 0 ? (
                 <div className={styles.billingItem}>
                   <p>Liquidity Cash</p>
-                  <p className="text-green-600 font-semibold">-${walletAmountToUse.toFixed(2)}</p>
+                  <p className="text-green-600 font-semibold">
+                    -${walletAmountToUse.toFixed(2)}
+                  </p>
                 </div>
               ) : (
                 <div className={styles.billingItem}>
@@ -760,12 +939,12 @@ export default function Cart() {
               )}
 
               <div className={styles.billingItem}>
-                <p>Taxes (13%)</p>
+                <p>Taxes &amp; Other Fees</p>
                 <p>${taxes.toFixed(2)}</p>
               </div>
 
               <div className={styles.billingItem}>
-                <p>Tip</p>
+                <p>Tips</p>
                 <p>${tipValue.toFixed(2)}</p>
               </div>
 
@@ -774,7 +953,7 @@ export default function Cart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* Payment Method Selection */}
+              {/* Payment Mode */}
               <div className="mt-6 grid grid-cols-1 gap-3">
                 <button
                   type="button"
@@ -790,8 +969,10 @@ export default function Cart() {
                 >
                   <Wallet className="w-5 h-5" />
                   {walletBalance >= baseTotal
-                    ? `Liquidity Cash (Full $${finalTotalAmount})`
-                    : `Liquidity Cash ($${walletBalance.toFixed(2)} available)`}
+                    ? `Liquidity Cash (Full Coverage $${finalTotalAmount})`
+                    : `Liquidity Cash ($${walletBalance.toFixed(
+                        2
+                      )} available)`}
                 </button>
 
                 <button
@@ -803,45 +984,64 @@ export default function Cart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
                   }`}
                 >
-                  {remainingAmount > 0 ? `Card ($${remainingDisplay} + Cash)` : "Card"}
+                  {remainingAmount > 0
+                    ? `Card ($${remainingAmount.toFixed(2)} + Cash)`
+                    : "Card"}
                 </button>
 
-                {remainingAmount > 0 && remainingAmountCents >= 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setPayMode("apple_pay")}
-                    className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
-                      payMode === "apple_pay"
-                        ? "bg-black text-white border-black shadow-lg"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
-                    }`}
-                  >
-                     Apple Pay (${remainingDisplay})
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("apple_pay")}
+                  className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
+                    payMode === "apple_pay"
+                      ? "bg-black text-white border-black shadow-lg"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
+                  }`}
+                >
+                   Apple Pay
+                </button>
               </div>
 
+              
+              {/* New Card Form */}
               {payMode === "new_card" && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
-                  amountLabel={`$${remainingDisplay}`}
+                  amountLabel={`$${remainingAmount.toFixed(2)}`}
                   onSuccess={(paymentIntentId) =>
-                    createLiquidityOrder(paymentIntentId, walletAmountToUse, "1")
+                    createLiquidityOrder(
+                      paymentIntentId,
+                      walletAmountToUse,
+                      "1"
+                    )
                   }
                 />
               )}
 
-              {payMode === "apple_pay" && remainingAmount > 0 && remainingAmountCents >= 1 && (
+              {/* FIXED Apple Pay - Only render when ready + stable */}
+              {payMode === "apple_pay" && remainingAmount > 0 && applePayReady && (
                 <div className="mt-4">
                   <ApplePayButton
-                    amountCents={remainingAmountCents}
-                    displayAmount={`$${remainingDisplay}`}
+                    amountCents={Math.round(remainingAmount * 100)}
                     onSuccess={(transactionId) =>
-                      createLiquidityOrder(transactionId, walletAmountToUse, "1")
+                      createLiquidityOrder(
+                        transactionId,
+                        walletAmountToUse,
+                        "1"
+                      )
                     }
                   />
                 </div>
               )}
+
+              <StripeApplePayWrapper
+  payMode={payMode}
+  remainingAmount={remainingAmount}
+  walletAmountToUse={walletAmountToUse}
+  createLiquidityOrder={createLiquidityOrder}
+/>
+
+
             </div>
           </Elements>
 
@@ -859,9 +1059,17 @@ export default function Cart() {
               {payMode === "wallet" && (
                 <button
                   type="submit"
-                  disabled={!activePickup || cartItems.length === 0 || walletLoading || walletBalance < baseTotal}
+                  disabled={
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
+                  }
                   className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    !activePickup || cartItems.length === 0 || walletLoading || walletBalance < baseTotal
+                    !activePickup ||
+                    cartItems.length === 0 ||
+                    walletLoading ||
+                    walletBalance < baseTotal
                       ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                       : "bg-green-600 text-white hover:bg-green-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                   }`}
@@ -880,9 +1088,15 @@ export default function Cart() {
               {payMode === "new_card" && !clientSecret && (
                 <button
                   type="submit"
-                  disabled={initializingPayment || !activePickup || cartItems.length === 0}
+                  disabled={
+                    initializingPayment ||
+                    !activePickup ||
+                    cartItems.length === 0
+                  }
                   className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    initializingPayment || !activePickup || cartItems.length === 0
+                    initializingPayment ||
+                    !activePickup ||
+                    cartItems.length === 0
                       ? "bg-gray-400 text-gray-200 cursor-not-allowed"
                       : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                   }`}
@@ -893,12 +1107,16 @@ export default function Cart() {
                       Starting payment...
                     </>
                   ) : remainingAmount > 0 ? (
-                    `Pay $${remainingDisplay} (Cash + Card)`
+                    `Pay $${remainingAmount.toFixed(2)} (Cash + Card)`
                   ) : (
                     `Pay Full $${finalTotalAmount} with Liquidity Cash`
                   )}
                 </button>
               )}
+
+              
+
+              {/* No checkout button for Apple Pay - uses its own */}
             </form>
           </div>
         </div>
