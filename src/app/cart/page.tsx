@@ -82,6 +82,8 @@ function ApplePayButton({
     const safeAmountCents = Math.max(1, Math.floor(Math.abs(amountCents)));
     
     console.log("🚀 Apple Pay - Raw:", amountCents, "Safe:", safeAmountCents/100, "cents:", safeAmountCents);
+    console.log(amountCents);
+    console.log(safeAmountCents);
     
     if (safeAmountCents < 1) {
       setState('error');
