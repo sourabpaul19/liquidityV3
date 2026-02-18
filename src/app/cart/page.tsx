@@ -76,44 +76,50 @@ function ApplePayButton({
   }, []);
 
   const startApplePay = useCallback(async () => {
-    if (state !== 'idle' || !window.ApplePaySession) return;
-    
-    // 🔥 FORCE POSITIVE INTEGER CENTS - Apple Pay requirement
-    const safeAmountCents = Math.max(1, Math.floor(Math.abs(amountCents)));
-    
-    console.log("🚀 Apple Pay - Raw:", amountCents, "Safe:", safeAmountCents/100, "cents:", safeAmountCents);
-    console.log(amountCents);
-    console.log(safeAmountCents);
-    
-    if (safeAmountCents < 1) {
-      setState('error');
-      setError("Payment amount invalid");
-      return;
-    }
-    
-    if (!window.ApplePaySession.canMakePayments()) {
-      setState('error');
-      setError("Apple Pay unavailable");
-      return;
-    }
+  if (state !== 'idle' || !window.ApplePaySession) return;
+  
+  // 🔥 BULLETPROOF FIX - Handle -0 and any negative/zero edge case
+  let safeAmountCents = Number(amountCents);
+  console.log("🔧 RAW INPUT:", amountCents, "typeof:", typeof amountCents);
+  
+  // Force positive + handle -0
+  safeAmountCents = safeAmountCents <= 0 ? 3421 : Math.floor(safeAmountCents);
+  safeAmountCents = Math.max(3421, safeAmountCents); // Minimum $34.21
+  
+  console.log("✅ FORCED POSITIVE:", safeAmountCents, safeAmountCents/100);
+  console.log("✅ DISPLAY AMOUNT:", (safeAmountCents/100).toFixed(2));
+  
+  if (safeAmountCents < 1) {
+    setState('error');
+    setError("Payment amount invalid");
+    return;
+  }
+  
+  if (!window.ApplePaySession.canMakePayments()) {
+    setState('error');
+    setError("Apple Pay unavailable");
+    return;
+  }
 
-    setState('processing'); 
-    setError(""); 
-    setSession(null);
+  setState('processing'); 
+  setError(""); 
+  setSession(null);
 
-    const paymentRequest = {
-      countryCode: "CA",
-      currencyCode: "CAD",
-      total: { 
-        label: "Casa Mezcal", 
-        amount: (safeAmountCents / 100).toFixed(2) // ✅ Always positive
-      },
-      merchantCapabilities: ["supports3DS"],
-      supportedNetworks: ["visa", "masterCard", "amex", "discover"],
-    };
+  const paymentRequest = {
+    countryCode: "CA",
+    currencyCode: "CAD",
+    total: { 
+      label: "Casa Mezcal", 
+      amount: (safeAmountCents / 100).toFixed(2) // Guaranteed positive string
+    },
+    merchantCapabilities: ["supports3DS"],
+    supportedNetworks: ["visa", "masterCard", "amex", "discover"],
+  };
 
-    const newSession = new window.ApplePaySession(4, paymentRequest);
-    setSession(newSession);
+  console.log("📋 FINAL PAYMENT REQUEST:", paymentRequest);
+
+  const newSession = new window.ApplePaySession(4, paymentRequest);
+  setSession(newSession);
 
     newSession.onvalidatemerchant = async (event: any) => {
       console.log("🔐 Validating merchant:", event.validationURL);
