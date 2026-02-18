@@ -122,28 +122,54 @@ function ApplePayButton({
   setSession(newSession);
 
     newSession.onvalidatemerchant = async (event: any) => {
-      console.log("🔐 Validating merchant:", event.validationURL);
-      try {
-        const response = await fetch("/api/apple-pay/validate-merchant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            validationURL: event.validationURL,
-            domainName: window.location.hostname 
-          }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const merchantSession = await response.json();
-        console.log("✅ Merchant validated");
-        newSession.completeMerchantValidation(merchantSession);
-      } catch (err: any) {
-        console.error("❌ Merchant validation FAILED:", err);
-        newSession.abort();
-        setState('error');
-        setError("Merchant validation failed");
-        setSession(null);
-      }
-    };
+  console.log("🔐 === MERCHANT VALIDATION START ===");
+  console.log("🔐 Validation URL:", event.validationURL);
+  console.log("🔐 Domain:", window.location.hostname);
+  
+  try {
+    const response = await fetch("/api/apple-pay/validate-merchant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        validationURL: event.validationURL,
+        domainName: window.location.hostname 
+      }),
+    });
+    
+    console.log("📡 BACKEND STATUS:", response.status);
+    console.log("📡 BACKEND OK?", response.ok);
+    
+    const responseText = await response.text();
+    console.log("📡 RAW RESPONSE:", responseText);
+    
+    if (!response.ok) {
+      console.error("❌ HTTP ERROR", response.status, responseText);
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const merchantSession = JSON.parse(responseText);
+    console.log("✅ MERCHANT SESSION:", merchantSession);
+    console.log("✅ Keys in response:", Object.keys(merchantSession));
+    
+    // Verify required fields exist
+    if (!merchantSession.merchantSessionIdentifier) {
+      console.error("❌ MISSING merchantSessionIdentifier");
+      throw new Error("Invalid merchant session");
+    }
+    
+    newSession.completeMerchantValidation(merchantSession);
+    console.log("🔓 VALIDATION COMPLETE");
+    
+  } catch (err: any) {
+    console.error("💥 VALIDATION FAILED:", err.message);
+    console.error("💥 FULL ERROR:", err);
+    newSession.abort();
+    setState('error');
+    setError("Merchant validation failed - check console");
+    setSession(null);
+  }
+};
+
 
     newSession.onpaymentauthorized = async (event: any) => {
       console.log("💳 Processing Apple Pay payment");
