@@ -43,7 +43,13 @@ interface OldOrder {
 }
 
 
-type PayMode = "wallet" | "new_card" | "apple_pay";
+//type PayMode = "wallet" | "new_card" | "apple_pay";
+type PayMode =
+  | "wallet"
+  | "new_card"
+  | "apple_pay"
+  | "split_card"
+  | "split_apple";
 
 /* ---------- Saved cards ---------- */
 function StripeApplePayWrapper({
@@ -290,7 +296,7 @@ function ApplePayButton({
     console.log("Apple Pay Debug:", {
   amountCents,
   displayAmount: (amountCents / 100).toFixed(2),
-});
+  });
     setProcessing(true);
 
     const request: any = {
@@ -427,8 +433,8 @@ function ApplePayButton({
     }
 
     alert("Apple Pay payment failed.");
-  }
-};
+    }
+  };
     newSession.oncancel = () => {
       console.log("Apple Pay: cancelled by user");
       isSessionActive = false;
@@ -613,9 +619,32 @@ export default function Cart() {
   const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
   const taxes = cartTotal * 0.13;
   const baseTotal = cartTotal + taxes + tipValue;
-  const walletAmountToUse = Math.min(walletBalance, baseTotal);
-  const remainingAmount = Math.max(0, baseTotal - walletBalance);
+  //const walletAmountToUse = Math.min(walletBalance, baseTotal);
+  //const remainingAmount = Math.max(0, baseTotal - walletBalance);
+  
+  let walletAmountToUse = 0;
+  let remainingAmount = baseTotal;
+
+  if (payMode === "wallet") {
+    walletAmountToUse = baseTotal;
+    remainingAmount = 0;
+  }
+  else if (payMode === "split_card" || payMode === "split_apple") {
+    walletAmountToUse = Math.min(walletBalance, baseTotal);
+    remainingAmount = baseTotal - walletAmountToUse;
+  }
+  else {
+    // full card or full apple pay
+    walletAmountToUse = 0;
+    remainingAmount = baseTotal;
+  }
+  
   const finalTotalAmount = baseTotal.toFixed(2);
+
+  const isCartValid = cartItems.length > 0;
+  const isPickupSelected = !!activePickup;
+  const canUseWalletFull = walletBalance >= baseTotal;
+  const canUseSplit = walletBalance > 0 && walletBalance < baseTotal;
 
   const removeItem = async (itemId: string) => {
     if (!userId || !itemId) return;
@@ -854,24 +883,50 @@ export default function Cart() {
   );
 
   // FIXED: Skip Apple Pay from main checkout (uses own button)
-  const handleCheckout = async (e: FormEvent) => {
-    e.preventDefault();
+  // const handleCheckout = async (e: FormEvent) => {
+  //   e.preventDefault();
     
-    // Apple Pay uses its own button - don't process here
-    if (payMode === "apple_pay") return;
+  //   // Apple Pay uses its own button - don't process here
+  //   if (payMode === "apple_pay") return;
 
-    const skip = localStorage.getItem("ack_skip_popup");
-    if (!skip) {
-      setShowAcknowledgement(true);
-      return;
-    }
+  //   const skip = localStorage.getItem("ack_skip_popup");
+  //   if (!skip) {
+  //     setShowAcknowledgement(true);
+  //     return;
+  //   }
 
-    if (payMode === "wallet") {
-      await payWithWallet();
-    } else if (payMode === "new_card") {
-      await initStripePaymentIntent();
-    }
-  };
+  //   if (payMode === "wallet") {
+  //     await payWithWallet();
+  //   } else if (payMode === "new_card") {
+  //     await initStripePaymentIntent();
+  //   }
+  // };
+
+  const handleCheckout = async (e: FormEvent) => {
+  e.preventDefault();
+
+  if (!isCartValid) {
+    alert("Your cart is empty.");
+    return;
+  }
+
+  if (!isPickupSelected) {
+    alert("Please select pickup location.");
+    return;
+  }
+
+  if (payMode === "wallet" && !canUseWalletFull) {
+    alert("Insufficient wallet balance.");
+    return;
+  }
+
+  if (payMode === "wallet") {
+    await payWithWallet();
+  } 
+  else {
+    await initStripePaymentIntent();
+  }
+};
 
   const canUseWallet = walletBalance > 0;
 
@@ -1012,8 +1067,98 @@ export default function Cart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* Payment Mode */}
               <div className="mt-6 grid grid-cols-1 gap-3">
+
+                {/* FULL WALLET */}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("wallet")}
+                  disabled={!canUseWalletFull}
+                  className={`py-3 px-4 rounded-lg font-medium border transition ${
+                    payMode === "wallet"
+                      ? "bg-green-600 text-white border-green-600 shadow-lg"
+                      : canUseWalletFull
+                      ? "bg-white border-gray-300 hover:bg-green-50"
+                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                  }`}
+                >
+                  {canUseWalletFull
+                    ? `Pay $${finalTotalAmount} with Wallet`
+                    : `Wallet Balance $${walletBalance.toFixed(2)} (Insufficient)`}
+                </button>
+
+                {/* FULL CARD */}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("new_card")}
+                  disabled={!isCartValid}
+                  className={`py-3 px-4 rounded-lg font-medium border transition ${
+                    payMode === "new_card"
+                      ? "bg-primary text-white border-primary shadow-lg"
+                      : "bg-white border-gray-300 hover:bg-primary/5"
+                  }`}
+                >
+                  Pay ${finalTotalAmount} with Card
+                </button>
+
+                {/* FULL APPLE PAY */}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("apple_pay")}
+                  disabled={!isCartValid}
+                  className={`py-3 px-4 rounded-lg font-medium border transition ${
+                    payMode === "apple_pay"
+                      ? "bg-black text-white border-black shadow-lg"
+                      : "bg-white border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                   Pay ${finalTotalAmount} with Apple Pay
+                </button>
+
+                {/* SPLIT CARD */}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("split_card")}
+                  disabled={!canUseSplit}
+                  className={`py-3 px-4 rounded-lg font-medium border transition ${
+                    payMode === "split_card"
+                      ? "bg-purple-600 text-white border-purple-600 shadow-lg"
+                      : canUseSplit
+                      ? "bg-white border-gray-300 hover:bg-purple-50"
+                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                  }`}
+                >
+                  {canUseSplit
+                    ? `Wallet $${walletAmountToUse.toFixed(
+                        2
+                      )} + Card $${remainingAmount.toFixed(2)}`
+                    : "Split not available"}
+                </button>
+
+                {/* SPLIT APPLE PAY */}
+                <button
+                  type="button"
+                  onClick={() => setPayMode("split_apple")}
+                  disabled={!canUseSplit}
+                  className={`py-3 px-4 rounded-lg font-medium border transition ${
+                    payMode === "split_apple"
+                      ? "bg-purple-600 text-white border-purple-600 shadow-lg"
+                      : canUseSplit
+                      ? "bg-white border-gray-300 hover:bg-purple-50"
+                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                  }`}
+                >
+                  {canUseSplit
+                    ? `Wallet $${walletAmountToUse.toFixed(
+                        2
+                      )} + Apple Pay  $${remainingAmount.toFixed(2)}`
+                    : "Split not available"}
+                </button>
+
+              </div>
+
+              {/* Payment Mode */}
+              {/* <div className="mt-6 grid grid-cols-1 gap-3">
                 <button
                   type="button"
                   onClick={() => setPayMode("wallet")}
@@ -1059,11 +1204,10 @@ export default function Cart() {
                 >
                    Apple Pay
                 </button>
-              </div>
+              </div> */}
 
-              
-              {/* New Card Form */}
-              {payMode === "new_card" && clientSecret && (
+
+              {(payMode === "new_card" || payMode === "split_card") && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
                   amountLabel={`$${remainingAmount.toFixed(2)}`}
@@ -1077,8 +1221,41 @@ export default function Cart() {
                 />
               )}
 
+              {(payMode === "apple_pay" || payMode === "split_apple") &&
+  remainingAmount > 0 && (
+                  <div className="mt-4">
+                    <ApplePayButton
+                      amountCents={Math.round(remainingAmount * 100)}
+                      onSuccess={(transactionId) =>
+                        createLiquidityOrder(
+                          transactionId,
+                          walletAmountToUse,
+                          "1"
+                        )
+                      }
+                    />
+                  </div>
+                )}
+
+
+              
+              {/* New Card Form */}
+              {/* {payMode === "new_card" && clientSecret && (
+                <NewCardPaymentForm
+                  clientSecret={clientSecret}
+                  amountLabel={`$${remainingAmount.toFixed(2)}`}
+                  onSuccess={(paymentIntentId) =>
+                    createLiquidityOrder(
+                      paymentIntentId,
+                      walletAmountToUse,
+                      "1"
+                    )
+                  }
+                />
+              )} */}
+
               {/* FIXED Apple Pay - Only render when ready + stable */}
-              {payMode === "apple_pay" && remainingAmount > 0 && applePayReady && (
+              {/* {payMode === "apple_pay" && remainingAmount > 0 && applePayReady && (
                 <div className="mt-4">
                   <ApplePayButton
                     amountCents={Math.round(remainingAmount * 100)}
@@ -1091,7 +1268,7 @@ export default function Cart() {
                     }
                   />
                 </div>
-              )}
+              )} */}
 
               <StripeApplePayWrapper
   payMode={payMode}
@@ -1144,7 +1321,7 @@ export default function Cart() {
                 </button>
               )}
 
-              {payMode === "new_card" && !clientSecret && (
+              {(payMode === "new_card" || payMode === "split_card") && !clientSecret && (
                 <button
                   type="submit"
                   disabled={

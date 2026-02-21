@@ -32,10 +32,27 @@ const TipsSelector: React.FC<TipsSelectorProps> = ({ value, onChange }) => {
   }
 };
 
-  const handleCustomSubmit = () => {
+//   const handleCustomSubmit = () => {
+//   const amount = Number(customTip);
+//   if (!amount || amount <= 0) {
+//     alert("Please enter a valid tip amount greater than 0.");
+//     return;
+//   }
+
+//   const newTip = `$${amount}`;
+//   const updatedTips = tips.some((t) => t.startsWith("$"))
+//     ? tips.map((t) => (t.startsWith("$") ? newTip : t))
+//     : tips.map((t) => (t === "Other" ? newTip : t));
+
+//   setTips(updatedTips);
+//   setActiveTip(newTip);
+//   onChange(amount, true); // custom $ tip
+//   setShowModal(false);
+// };
+const handleCustomSubmit = () => {
   const amount = Number(customTip);
-  if (!amount || amount <= 0) {
-    alert("Please enter a valid tip amount greater than 0.");
+  if (!amount && amount !== 0) {  // Changed: Now allows exactly 0
+    alert("Please enter a valid tip amount.");
     return;
   }
 
@@ -46,9 +63,10 @@ const TipsSelector: React.FC<TipsSelectorProps> = ({ value, onChange }) => {
 
   setTips(updatedTips);
   setActiveTip(newTip);
-  onChange(amount, true); // custom $ tip
+  onChange(amount, true); // custom $ tip (0 is now allowed)
   setShowModal(false);
 };
+
 
   return (
     <>
