@@ -60,7 +60,8 @@ function StripeApplePayWrapper({
 }: any) {
   const stripe = useStripe();
 
-  if (payMode !== "apple_pay") return null;
+  // ✅ Allow both normal & split Apple Pay
+  if (payMode !== "apple_pay" && payMode !== "split_apple") return null;
   if (!stripe) return null;
   if (remainingAmount <= 0) return null;
 
