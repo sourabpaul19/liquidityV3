@@ -1222,7 +1222,7 @@ export default function Cart() {
                 />
               )}
 
-              {(payMode === "apple_pay" || payMode === "split_apple") &&
+              {/* {(payMode === "apple_pay" || payMode === "split_apple") &&
   remainingAmount > 0 && (
                   <div className="mt-4">
                     <ApplePayButton
@@ -1236,7 +1236,7 @@ export default function Cart() {
                       }
                     />
                   </div>
-                )}
+                )} */}
 
 
               
