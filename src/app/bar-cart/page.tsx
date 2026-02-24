@@ -1082,9 +1082,10 @@ export default function RestaurantBarCart() {
               else setTipPercent(val);
               setTipIsAmount(isAmount);
             }}
-          />
+          />{/* MAIN CHECKOUT BUTTON (card only) */}
 
-          {/* MAIN CHECKOUT BUTTON (card only) */}
+          {payMode === "new_card" && !clientSecret && (
+          
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
               <button
@@ -1145,6 +1146,8 @@ export default function RestaurantBarCart() {
               </button>
             </form>
           </div>
+)}
+
         </div>
       </section>
     </>
