@@ -10,6 +10,7 @@ import {
   CardElement,
   useStripe,
   useElements,
+  PaymentRequestButtonElement,
 } from "@stripe/react-stripe-js";
 
 import dynamic from "next/dynamic";
@@ -61,231 +62,7 @@ interface Order {
 
 type PayMode = "new_card" | "apple_pay";
 
-// ---------- ApplePaySession types ----------
-declare global {
-  interface Window {
-    ApplePaySession?: any;
-  }
-}
-
-// ---------- Apple Pay Button (same logic as attached cart) ----------
-function ApplePayButton({
-  amountCents,
-  onSuccess,
-}: {
-  amountCents: number;
-  onSuccess: (transactionId: string) => Promise<void>;
-}) {
-  const [supported, setSupported] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [session, setSession] = useState<any | null>(null);
-
-  // Cleanup previous session on unmount
-  useEffect(() => {
-    return () => {
-      if (session) {
-        try {
-          session.abort();
-        } catch {
-          // ignore
-        }
-      }
-    };
-  }, [session]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.ApplePaySession) return;
-
-    const canPay = window.ApplePaySession.canMakePayments();
-    if (canPay) setSupported(true);
-  }, []);
-
-  const startApplePay = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    if (!window.ApplePaySession) return;
-    if (processing || session) {
-      console.log("Apple Pay blocked: already processing or session active");
-      return;
-    }
-
-    console.log("Apple Pay Debug:", {
-      amountCents,
-      displayAmount: (amountCents / 100).toFixed(2),
-    });
-
-    setProcessing(true);
-
-    const request: any = {
-      countryCode: "CA",
-      currencyCode: "CAD",
-      total: {
-        label: "Liquidity Bars Order",
-        amount: (amountCents / 100).toFixed(2),
-      },
-      merchantCapabilities: ["supports3DS"],
-      supportedNetworks: ["visa", "masterCard", "amex"],
-    };
-
-    const newSession = new window.ApplePaySession(3, request);
-    setSession(newSession);
-    let isSessionActive = true;
-
-    // Merchant validation
-    newSession.onvalidatemerchant = async (event: any) => {
-      console.log("Apple Pay validating merchant");
-      try {
-        const res = await fetch("/api/apple-pay-validate-merchant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ validationURL: event.validationURL }),
-        });
-
-        if (!res.ok) {
-          console.error("Merchant validation failed, HTTP:", res.status);
-          newSession.abort();
-          setProcessing(false);
-          setSession(null);
-          return;
-        }
-
-        const merchantSession = await res.json();
-        newSession.completeMerchantValidation(merchantSession);
-      } catch (err) {
-        console.error("Apple Pay merchant validation error:", err);
-        newSession.abort();
-        setProcessing(false);
-        setSession(null);
-      }
-    };
-
-    // Payment authorized
-    newSession.onpaymentauthorized = async (event: any) => {
-      console.log("Apple Pay processing payment");
-      if (!isSessionActive) return;
-
-      try {
-        const token = event.payment.token?.paymentData;
-        if (!token) {
-          console.error("No Apple Pay token");
-          try {
-            if (isSessionActive) {
-              newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-            }
-          } catch {
-            // ignore
-          }
-          if (isSessionActive) {
-            setProcessing(false);
-            setSession(null);
-          }
-          return;
-        }
-
-        const res = await fetch("/api/apple-pay-charge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token,
-            amount: amountCents,
-            currency: "cad",
-          }),
-        });
-
-        if (!isSessionActive) return;
-        const data = await res.json();
-        console.log("Apple Pay charge response:", data);
-
-        if (data.status === "success" && data.transaction_id) {
-          try {
-            if (isSessionActive) {
-              newSession.completePayment(
-                window.ApplePaySession.STATUS_SUCCESS
-              );
-            }
-          } catch {
-            // ignore
-          }
-          if (isSessionActive) {
-            setProcessing(false);
-            setSession(null);
-          }
-          await onSuccess(data.transaction_id);
-        } else {
-          try {
-            if (isSessionActive) {
-              newSession.completePayment(
-                window.ApplePaySession.STATUS_FAILURE
-              );
-            }
-          } catch {
-            // ignore
-          }
-          if (isSessionActive) {
-            setProcessing(false);
-            setSession(null);
-          }
-          alert(data.message || "Apple Pay payment failed.");
-        }
-      } catch (err) {
-        console.error("Apple Pay charge error:", err);
-        try {
-          if (isSessionActive) {
-            newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-          }
-        } catch {
-          // ignore
-        }
-        if (isSessionActive) {
-          setProcessing(false);
-          setSession(null);
-        }
-        alert("Apple Pay payment failed.");
-      }
-    };
-
-    newSession.oncancel = () => {
-      console.log("Apple Pay cancelled by user");
-      isSessionActive = false;
-      setProcessing(false);
-      setSession(null);
-    };
-
-    newSession.begin();
-  }, [amountCents, processing, session]);
-
-  if (!supported) {
-    return (
-      <button
-        type="button"
-        disabled
-        className="py-3 px-4 rounded-lg font-medium border bg-gray-200 text-gray-500 w-full"
-      >
-        Apple Pay not available on this device
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={startApplePay}
-      disabled={processing}
-      className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full ${
-        processing
-          ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-          : "bg-black text-white border-black shadow-lg hover:bg-gray-900"
-      }`}
-    >
-      {processing && (
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-      )}
-      Pay with Apple Pay
-    </button>
-  );
-}
-
-// ---------- Wrapper to show ApplePayButton only when mode/amount valid ----------
+/* ---------- Stripe Payment Request Apple Pay / GPay ---------- */
 function StripeApplePayWrapper({
   payMode,
   remainingAmount,
@@ -293,24 +70,113 @@ function StripeApplePayWrapper({
 }: {
   payMode: PayMode;
   remainingAmount: number;
-  createLiquidityOrder: (id: string, walletUsed: number, paymentType: string) => Promise<void>;
+  createLiquidityOrder: (
+    id: string,
+    walletUsed: number,
+    paymentType: string
+  ) => Promise<void>;
 }) {
+  const stripe = useStripe();
+
   if (payMode !== "apple_pay") return null;
+  if (!stripe) return null;
   if (remainingAmount <= 0) return null;
 
   return (
     <div className="mt-4">
-      <ApplePayButton
-        amountCents={Math.round(remainingAmount * 100)}
-        onSuccess={(transactionId) =>
-          createLiquidityOrder(transactionId, 0, "1")
+      <StripeApplePayButton
+        stripe={stripe}
+        amount={remainingAmount}
+        onSuccess={(paymentIntentId) =>
+          createLiquidityOrder(paymentIntentId, 0, "1")
         }
       />
     </div>
   );
 }
 
-// ---------- New card payment ----------
+function StripeApplePayButton({
+  stripe,
+  amount,
+  onSuccess,
+}: {
+  stripe: any;
+  amount: number;
+  onSuccess: (id: string) => Promise<void>;
+}) {
+  const [paymentRequest, setPaymentRequest] = useState<any>(null);
+
+  useEffect(() => {
+    if (!stripe || amount <= 0) return;
+
+    const pr = stripe.paymentRequest({
+      country: "CA",
+      currency: "cad",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: Math.round(amount * 100),
+      },
+      requestPayerName: true,
+      requestPayerEmail: true,
+    });
+
+    pr.canMakePayment().then((result: any) => {
+      console.log("canMakePayment", result);
+      if (result) setPaymentRequest(pr);
+    });
+
+    pr.on("paymentmethod", async (ev: any) => {
+      try {
+        const res = await fetch("/api/create-payment-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: Math.round(amount * 100),
+            currency: "cad",
+          }),
+        });
+
+        const data = await res.json();
+
+        const { paymentIntent, error } = await stripe.confirmCardPayment(
+          data.client_secret,
+          { payment_method: ev.paymentMethod.id },
+          { handleActions: false }
+        );
+
+        if (error) {
+          ev.complete("fail");
+          return;
+        }
+
+        ev.complete("success");
+
+        if (paymentIntent.status === "requires_action") {
+          await stripe.confirmCardPayment(data.client_secret);
+        }
+
+        await onSuccess(paymentIntent.id);
+      } catch (err) {
+        console.error("Stripe Apple Pay error:", err);
+        ev.complete("fail");
+      }
+    });
+  }, [stripe, amount, onSuccess]);
+
+  if (!paymentRequest) return (
+    <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center text-sm text-gray-400">
+      Apple Pay / GPay not available in this browser
+    </div>
+  );
+
+  return (
+    <PaymentRequestButtonElement
+      options={{ paymentRequest }}
+    />
+  );
+}
+
+/* ---------- New card (Stripe Elements) ---------- */
 function NewCardPaymentForm({
   clientSecret,
   amountLabel,
@@ -324,7 +190,7 @@ function NewCardPaymentForm({
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements || !clientSecret || processing) return;
 
@@ -395,7 +261,9 @@ function NewCardPaymentForm({
         >
           <div className="text-center text-white px-4">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-            <div className="text-sm font-medium">Processing Payment...</div>
+            <div className="text-sm font-medium">
+              Processing Payment...
+            </div>
             <div className="text-xs mt-1 opacity-90">Please wait</div>
           </div>
         </div>
@@ -427,7 +295,7 @@ const QuantityButton = dynamic(
   { ssr: false }
 );
 
-export default function RestaurantCart() {
+export default function RestaurantBarCart() {
   const router = useRouter();
 
   const [deviceId, setDeviceId] = useState<string>("");
@@ -759,7 +627,6 @@ export default function RestaurantCart() {
   const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
 
-    // Apple Pay uses its own button
     if (payMode === "apple_pay") return;
 
     if (payMode === "new_card" && !clientSecret) {
@@ -918,7 +785,7 @@ export default function RestaurantCart() {
               </div>
 
               <div className={styles.billingItem}>
-                <p>Taxes & Other Fees</p>
+                <p>Taxes &amp; Other Fees</p>
                 <p>${taxes.toFixed(2)}</p>
               </div>
 
@@ -932,7 +799,6 @@ export default function RestaurantCart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* Mode buttons */}
               <div className="mt-6 grid grid-cols-1 gap-3">
                 <button
                   type="button"
@@ -955,11 +821,10 @@ export default function RestaurantCart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
                   }`}
                 >
-                  Pay ${finalTotalAmount} with Apple Pay
+                  Pay ${finalTotalAmount} with Apple Pay / GPay
                 </button>
               </div>
 
-              {/* Card form */}
               {payMode === "new_card" && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
@@ -968,7 +833,6 @@ export default function RestaurantCart() {
                 />
               )}
 
-              {/* Apple Pay button */}
               <StripeApplePayWrapper
                 payMode={payMode}
                 remainingAmount={remainingAmount}
