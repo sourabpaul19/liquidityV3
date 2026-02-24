@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -13,12 +13,8 @@ import {
   PaymentRequestButtonElement,
 } from "@stripe/react-stripe-js";
 
-import styles from "./cart.module.scss";
-import Header from "@/components/common/Header/Header";
-import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
-import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
-import TipsSelector from "@/components/common/TipsSelector/TipsSelector";
-import stripe from "stripe";
+import dynamic from "next/dynamic";
+import styles from "./bar-cart.module.scss";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -35,33 +31,54 @@ interface CartItem {
   special_instruction?: string;
 }
 
-interface OldOrder {
+interface OrderProduct {
   id: string;
-  unique_id: string;
-  order_date: string;
-  status: string;
+  product_name: string;
+  quantity: string;
+  price: string;
+  choice_of_mixer_name?: string;
+  is_double_shot: string;
+  shot_count: string;
+  special_instruction?: string;
+  unit: string;
 }
 
+interface Order {
+  id: string;
+  unique_id: string;
+  amount: string;
+  tax_amount: string;
+  total_amount: string;
+  tips: string;
+  order_date: string;
+  order_time: string;
+  created_at?: string;
+  table_no: string;
+  status: string;
+  order_type?: string;
+  shop_id?: string;
+  products: OrderProduct[];
+}
 
-//type PayMode = "wallet" | "new_card" | "apple_pay";
-type PayMode =
-  | "wallet"
-  | "new_card"
-  | "apple_pay"
-  | "split_card"
-  | "split_apple";
+type PayMode = "new_card" | "apple_pay";
 
-/* ---------- Saved cards ---------- */
+/* ---------- Stripe Payment Request Apple Pay / GPay ---------- */
 function StripeApplePayWrapper({
   payMode,
   remainingAmount,
-  walletAmountToUse,
   createLiquidityOrder,
-}: any) {
+}: {
+  payMode: PayMode;
+  remainingAmount: number;
+  createLiquidityOrder: (
+    id: string,
+    walletUsed: number,
+    paymentType: string
+  ) => Promise<void>;
+}) {
   const stripe = useStripe();
 
-  // ✅ Allow both normal & split Apple Pay
-  if (payMode !== "apple_pay" && payMode !== "split_apple") return null;
+  if (payMode !== "apple_pay") return null;
   if (!stripe) return null;
   if (remainingAmount <= 0) return null;
 
@@ -71,11 +88,7 @@ function StripeApplePayWrapper({
         stripe={stripe}
         amount={remainingAmount}
         onSuccess={(paymentIntentId) =>
-          createLiquidityOrder(
-            paymentIntentId,
-            walletAmountToUse,
-            "1"
-          )
+          createLiquidityOrder(paymentIntentId, 0, "1")
         }
       />
     </div>
@@ -108,6 +121,7 @@ function StripeApplePayButton({
     });
 
     pr.canMakePayment().then((result: any) => {
+      console.log("canMakePayment", result);
       if (result) setPaymentRequest(pr);
     });
 
@@ -149,14 +163,20 @@ function StripeApplePayButton({
     });
   }, [stripe, amount, onSuccess]);
 
-  if (!paymentRequest) return null;
+  if (!paymentRequest) return (
+    <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center text-sm text-gray-400">
+      Apple Pay / GPay not available in this browser
+    </div>
+  );
 
-  return <PaymentRequestButtonElement options={{ paymentRequest }} />;
+  return (
+    <PaymentRequestButtonElement
+      options={{ paymentRequest }}
+    />
+  );
 }
 
-
 /* ---------- New card (Stripe Elements) ---------- */
-
 function NewCardPaymentForm({
   clientSecret,
   amountLabel,
@@ -172,7 +192,7 @@ function NewCardPaymentForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!stripe || !elements || !clientSecret) return;
+    if (!stripe || !elements || !clientSecret || processing) return;
 
     setProcessing(true);
 
@@ -195,10 +215,8 @@ function NewCardPaymentForm({
       }
     );
 
-    setProcessing(false);
-
     if (error) {
-      console.error("Stripe card error:", error);
+      setProcessing(false);
       alert(error.message || "Payment failed");
       return;
     }
@@ -206,6 +224,7 @@ function NewCardPaymentForm({
     if (paymentIntent && paymentIntent.status === "succeeded") {
       await onSuccess(paymentIntent.id);
     } else {
+      setProcessing(false);
       alert("Payment did not complete.");
     }
   };
@@ -225,323 +244,195 @@ function NewCardPaymentForm({
           }}
         />
       </div>
+
       <button
         type="submit"
         disabled={!stripe || !clientSecret || processing}
-        className={`w-full py-3 px-4 rounded-lg font-medium transition ${
+        className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
           !stripe || !clientSecret || processing
-            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-            : "bg-primary text-white hover:bg-primary/90"
+            ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50"
+            : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
         }`}
       >
-        {processing ? (
-          <span className="flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Processing…
-          </span>
-        ) : (
-          `Pay ${amountLabel}`
-        )}
+        <div
+          className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+            processing ? "scale-100 opacity-100" : "scale-0 opacity-0"
+          }`}
+        >
+          <div className="text-center text-white px-4">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+            <div className="text-sm font-medium">
+              Processing Payment...
+            </div>
+            <div className="text-xs mt-1 opacity-90">Please wait</div>
+          </div>
+        </div>
+
+        <span
+          className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+            processing
+              ? "opacity-0 scale-95 pointer-events-none"
+              : "opacity-100 scale-100"
+          }`}
+        >
+          Pay {amountLabel}
+        </span>
       </button>
     </form>
   );
 }
 
-/* ---------- Apple Pay JS (FIXED VERSION) ---------- */
+const TipsSelector = dynamic(
+  () => import("@/components/common/TipsSelector/TipsSelector"),
+  { ssr: false }
+);
+const Header = dynamic(
+  () => import("@/components/common/Header/Header"),
+  { ssr: false }
+);
+const QuantityButton = dynamic(
+  () => import("@/components/common/QuantityButton/QuantityButton"),
+  { ssr: false }
+);
 
-declare global {
-  interface Window {
-    ApplePaySession?: any;
-  }
-}
-
-function ApplePayButton({
-  amountCents,
-  onSuccess,
-}: {
-  amountCents: number;
-  onSuccess: (transactionId: string) => Promise<void>;
-}) {
-  const [supported, setSupported] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [session, setSession] = useState<any>(null);
-
-  // Cleanup previous session on unmount
-  useEffect(() => {
-    return () => {
-      if (session) {
-        session.abort();
-      }
-    };
-  }, [session]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.ApplePaySession) return;
-    
-    const canPay = window.ApplePaySession.canMakePayments();
-    if (canPay) setSupported(true);
-  }, []);
-
-  const startApplePay = useCallback(async () => {
-    // Prevent multiple calls
-
-    let isSessionActive = true;
-
-    if (processing || !window.ApplePaySession || session) {
-      console.log("Apple Pay blocked: already processing or session active");
-      return;
-    }
-
-    console.log("Starting Apple Pay session");
-    console.log("Apple Pay Debug:", {
-  amountCents,
-  displayAmount: (amountCents / 100).toFixed(2),
-  });
-    setProcessing(true);
-
-    const request: any = {
-      countryCode: "CA",
-      currencyCode: "CAD",
-      total: {
-        label: "Liquidity Bars Order",
-        amount: (amountCents / 100).toFixed(2),
-      },
-      merchantCapabilities: ["supports3DS"],
-      supportedNetworks: ["visa", "masterCard", "amex"],
-    };
-
-    const newSession = new window.ApplePaySession(3, request);
-    setSession(newSession);
-
-    newSession.onvalidatemerchant = async (event: any) => {
-      console.log("Apple Pay: validating merchant");
-      try {
-        const res = await fetch("/api/apple-pay/validate-merchant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ validationURL: event.validationURL }),
-        });
-        
-        if (!res.ok) {
-          console.error("Merchant validation failed, HTTP", res.status);
-          newSession.abort();
-          setProcessing(false);
-          setSession(null);
-          return;
-        }
-        
-        const merchantSession = await res.json();
-        newSession.completeMerchantValidation(merchantSession);
-      } catch (err) {
-        console.error("Apple Pay merchant validation error:", err);
-        newSession.abort();
-        setProcessing(false);
-        setSession(null);
-      }
-    };
-
-    newSession.onpaymentauthorized = async (event: any) => {
-  console.log("Apple Pay: processing payment");
-
-  if (!isSessionActive) return;
-
-  try {
-    const token = event.payment.token?.paymentData;
-
-    if (!token) {
-      console.error("No Apple Pay token");
-
-      if (isSessionActive) {
-        try {
-          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-        } catch (e) {
-          console.log("Session already closed (token missing)");
-        }
-      }
-
-      if (isSessionActive) {
-        setProcessing(false);
-        setSession(null);
-      }
-
-      return;
-    }
-
-    const res = await fetch("/api/apple-pay/charge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        amount: amountCents,
-      }),
-    });
-
-    if (!isSessionActive) return;
-
-    const data = await res.json();
-    console.log("Apple Pay charge response:", data);
-
-    if (data.status === "success" && data.transaction_id) {
-
-      if (isSessionActive) {
-        try {
-          newSession.completePayment(window.ApplePaySession.STATUS_SUCCESS);
-        } catch (e) {
-          console.log("Session already closed (success)");
-        }
-      }
-
-      if (isSessionActive) {
-        setProcessing(false);
-        setSession(null);
-      }
-
-      await onSuccess(data.transaction_id);
-
-    } else {
-
-      if (isSessionActive) {
-        try {
-          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-        } catch (e) {
-          console.log("Session already closed (failure)");
-        }
-      }
-
-      if (isSessionActive) {
-        setProcessing(false);
-        setSession(null);
-      }
-
-      alert(data.message || "Apple Pay payment failed.");
-    }
-
-  } catch (err) {
-    console.error("Apple Pay charge error:", err);
-
-    if (isSessionActive) {
-      try {
-        newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
-      } catch (e) {
-        console.log("Session already closed (exception)");
-      }
-    }
-
-    if (isSessionActive) {
-      setProcessing(false);
-      setSession(null);
-    }
-
-    alert("Apple Pay payment failed.");
-    }
-  };
-    newSession.oncancel = () => {
-      console.log("Apple Pay: cancelled by user");
-      isSessionActive = false;
-      setProcessing(false);
-      setSession(null);
-    };
-
-    newSession.begin();
-  }, [amountCents, onSuccess, processing, session]);
-
-  if (!supported) {
-    return (
-      <button
-        type="button"
-        disabled
-        className="py-3 px-4 rounded-lg font-medium border bg-gray-200 text-gray-500 w-full"
-      >
-        Apple Pay not available on this device
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={startApplePay}
-      disabled={processing}
-      className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full ${
-        processing
-          ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-          : "bg-black text-white border-black shadow-lg hover:bg-gray-900"
-      }`}
-    >
-      {processing ? (
-        <>
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          Processing Apple Pay…
-        </>
-      ) : (
-        <> Pay with Apple Pay Now</>
-      )}
-    </button>
-  );
-}
-
-/* ---------- Main Cart (FIXED VERSION) ---------- */
-
-export default function Cart() {
+export default function RestaurantBarCart() {
   const router = useRouter();
 
-  const [userId, setUserId] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string>("");
+  const [tableNo, setTableNo] = useState<string>("");
+  const [shopId, setShopId] = useState<string>("");
+  const [shopName, setShopName] = useState<string>("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-
-  const [activePickup, setActivePickup] = useState<string | null>(null);
-  const [oldOrders, setOldOrders] = useState<OldOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
+  const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
 
-  const [showAcknowledgement, setShowAcknowledgement] = useState(false);
+  const [payMode, setPayMode] = useState<PayMode>("new_card");
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [initializingPayment, setInitializingPayment] = useState(false);
+  const [remainingAmount, setRemainingAmount] = useState(0);
+
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
 
-  const [deviceId, setDeviceId] = useState("web");
+  const getLocalStorage = (key: string): string => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(key) || "";
+  };
 
-  const [payMode, setPayMode] = useState<PayMode>("wallet");
+  const getShopId = (): string => {
+    const selected_shop = getLocalStorage("selected_shop");
+    return selected_shop
+      ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id")
+      : getLocalStorage("shop_id");
+  };
 
-
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [walletLoading, setWalletLoading] = useState(true);
-
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [initializingPayment, setInitializingPayment] = useState(false);
-
-  // NEW: Apple Pay stabilization
-  const [applePayReady, setApplePayReady] = useState(false);
+  const getTodayDate = (): string => {
+    return new Date().toISOString().split("T")[0];
+  };
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storedUser = localStorage.getItem("user_id");
-    if (storedUser) setUserId(storedUser);
-    const storedDevice = localStorage.getItem("device_id");
-    if (storedDevice) setDeviceId(storedDevice);
+    const storedDevice = getLocalStorage("device_id");
+    const storedTable =
+      getLocalStorage("table_number") || getLocalStorage("table_no");
+    const storedShop = getLocalStorage("selected_shop");
+    const storedShopParsed = storedShop ? JSON.parse(storedShop) : {};
+    const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
+    const storedShopName = storedShopParsed?.name || "";
+
+    if (!getLocalStorage("user_email")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_email", "user@liquiditybars.com");
+      }
+    }
+    if (!getLocalStorage("user_mobile")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_mobile", "+10000000000");
+      }
+    }
+
+    setDeviceId(storedDevice);
+    setTableNo(storedTable);
+    setShopId(storedShopId);
+    setShopName(storedShopName);
   }, []);
 
-  // Apple Pay ready state management
-  useEffect(() => {
-    if (payMode === "apple_pay") {
-      const timer = setTimeout(() => setApplePayReady(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setApplePayReady(false);
+  const filterOrdersByTable = useCallback(
+    (allOrders: Order[]) => {
+      const hasTableNumber = !!getLocalStorage("table_number");
+      const currentTableNo =
+        getLocalStorage("table_number") || tableNo;
+      const currentShopId = getShopId();
+      const todayDate = getTodayDate();
+
+      return allOrders.filter((order) => {
+        if (order.order_date !== todayDate) return false;
+        if (currentShopId && order.shop_id !== currentShopId) return false;
+
+        if (hasTableNumber && currentTableNo) {
+          return (
+            order.table_no === currentTableNo && order.order_type === "2"
+          );
+        } else {
+          return order.order_type === "1";
+        }
+      });
+    },
+    [tableNo]
+  );
+
+  const fetchOrders = useCallback(async () => {
+    if (!deviceId) return;
+    setLoadingOrders(true);
+    try {
+      const res = await fetch(
+        `https://dev2024.co.in/web/liquidity-backend/admin/api/tblOrderList/${deviceId}`
+      );
+      const data = await res.json();
+
+      if (data.status === "1") {
+        const filteredOrders = (data.orders || [])
+          .filter(
+            (order: Order) =>
+              order.products && order.products.length > 0
+          )
+          .sort((a: Order, b: Order) => {
+            const dateA = a.created_at
+              ? new Date(a.created_at).getTime()
+              : new Date(a.order_time).getTime();
+            const dateB = b.created_at
+              ? new Date(b.created_at).getTime()
+              : new Date(b.order_time).getTime();
+            return dateB - dateA;
+          });
+        setOrders(filteredOrders);
+      }
+    } catch (err) {
+      console.error("Orders fetch error:", err);
+    } finally {
+      setLoadingOrders(false);
     }
-  }, [payMode]);
+  }, [deviceId]);
+
+  useEffect(() => {
+    const matched = filterOrdersByTable(orders);
+    setMatchedOrders(matched);
+  }, [orders, tableNo, filterOrdersByTable]);
 
   const fetchCart = useCallback(async () => {
-    if (!userId) return;
+    if (!deviceId) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/getCart", {
+      const res = await fetch("/api/tableGetCart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, device_id: deviceId }),
+        body: JSON.stringify({ device_id: deviceId }),
       });
       const data = await res.json();
+
       if (data.status === "1" || data.status === 1) {
         setCartItems(data.cartItems || []);
         setCartTotal(Number(data.total_price || 0));
@@ -554,137 +445,44 @@ export default function Cart() {
     } finally {
       setLoading(false);
     }
-  }, [userId, deviceId]);
-
-  const fetchOldOrders = useCallback(async () => {
-    if (!userId) return;
-    setLoadingOrders(true);
-    try {
-      const res = await fetch(
-        `https://dev2024.co.in/web/liquidity-backend/admin/api/orderList/${userId}`
-      );
-      const data = await res.json();
-      if (
-        (data.status === "1" || data.status === 1) &&
-        Array.isArray(data.orders)
-      ) {
-        const filtered = data.orders.filter(
-          (order: OldOrder) =>
-            order.status === "0" ||
-            order.status === "1" ||
-            order.status === "2"
-        );
-        setOldOrders(filtered);
-      } else {
-        setOldOrders([]);
-      }
-    } catch (err) {
-      console.error("Order fetch error:", err);
-      setOldOrders([]);
-    } finally {
-      setLoadingOrders(false);
-    }
-  }, [userId]);
-
-  const fetchWalletBalance = useCallback(async () => {
-    if (!userId) return;
-    setWalletLoading(true);
-    try {
-      const res = await fetch(
-        `https://dev2024.co.in/web/liquidity-backend/admin/api/fetch_wallet_balance/${userId}`
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data.status === "1") {
-        setWalletBalance(Number(data.wallet_balance) || 0);
-      } else {
-        setWalletBalance(0);
-      }
-    } catch (err) {
-      console.error("Wallet fetch error:", err);
-      setWalletBalance(0);
-    } finally {
-      setWalletLoading(false);
-    }
-  }, [userId]);
-
-
-
-  useEffect(() => {
-    if (!userId) return;
-    fetchCart();
-    fetchOldOrders();
-    fetchWalletBalance();
-  }, [userId, fetchCart, fetchOldOrders, fetchWalletBalance,]);
-
-  const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
-  const taxes = cartTotal * 0.13;
-  const baseTotal = cartTotal + taxes + tipValue;
-  //const walletAmountToUse = Math.min(walletBalance, baseTotal);
-  //const remainingAmount = Math.max(0, baseTotal - walletBalance);
-  
-  let walletAmountToUse = 0;
-  let remainingAmount = baseTotal;
-
-  if (payMode === "wallet") {
-    walletAmountToUse = baseTotal;
-    remainingAmount = 0;
-  }
-  else if (payMode === "split_card" || payMode === "split_apple") {
-    walletAmountToUse = Math.min(walletBalance, baseTotal);
-    remainingAmount = baseTotal - walletAmountToUse;
-  }
-  else {
-    // full card or full apple pay
-    walletAmountToUse = 0;
-    remainingAmount = baseTotal;
-  }
-  
-  const finalTotalAmount = baseTotal.toFixed(2);
-
-  const isCartValid = cartItems.length > 0;
-  const isPickupSelected = !!activePickup;
-  const canUseWalletFull = walletBalance >= baseTotal;
-  const canUseSplit = walletBalance > 0 && walletBalance < baseTotal;
+  }, [deviceId]);
 
   const removeItem = async (itemId: string) => {
-    if (!userId || !itemId) return;
+    if (!deviceId || !itemId) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append("user_id", userId);
-      params.append("item_id", itemId);
-      const res = await fetch("/api/deleteCartItem", {
+      const res = await fetch("/api/deleteFromTempCart", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId }),
       });
+
       const data = await res.json();
       if (data.status === "1" || data.status === 1) {
         await fetchCart();
       } else {
         alert(data.message || "Could not remove item");
       }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to remove item");
     } finally {
       setLoading(false);
     }
   };
 
   const updateQuantity = async (itemId: string, newQty: number) => {
-    const item = cartItems.find((i) => i.id === itemId);
-    if (!item) return;
     if (newQty === 0) return removeItem(itemId);
     setLoading(true);
     try {
       const formData = new FormData();
+      formData.append("device_id", deviceId);
       formData.append("id", itemId);
       formData.append("quantity", String(newQty));
+
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/updateCartData",
-        {
-          method: "POST",
-          body: formData,
-        }
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/updateTempCartData",
+        { method: "POST", body: formData }
       );
       const data = await res.json();
       if (data.status === "1" || data.status === 1) {
@@ -700,128 +498,65 @@ export default function Cart() {
     }
   };
 
-  const getOrderType = () => {
-    if (activePickup === "lounge") return "1";
-    if (activePickup === "dance") return "2";
-    if (activePickup === "nightclub") return "3";
-    return "1";
+  useEffect(() => {
+    if (deviceId) {
+      fetchCart();
+      fetchOrders();
+    }
+  }, [deviceId, fetchCart, fetchOrders]);
+
+  const tipValue = tipIsAmount
+    ? tipAmount
+    : (cartTotal * tipPercent) / 100;
+  const taxes = cartTotal * 0.13;
+  const totalAmount = cartTotal + taxes + tipValue;
+  const finalTotalAmount = totalAmount.toFixed(2);
+
+  useEffect(() => {
+    setRemainingAmount(totalAmount);
+  }, [totalAmount, tipPercent, tipAmount, tipIsAmount, cartTotal]);
+
+  const getOrderType = (): string => {
+    return getLocalStorage("table_number") ? "2" : "1";
   };
 
-  const createLiquidityOrder = async (
-    transactionId: string,
-    walletUsed: number = 0,
-    paymentType: "1" | "2" = "1"
-  ) => {
-    const user_name = localStorage.getItem("user_name") || "";
-    const user_email = localStorage.getItem("user_email") || "";
-    const user_mobile = localStorage.getItem("user_mobile") || "";
-
-    const selected_shop = JSON.parse(
-      localStorage.getItem("selected_shop") || "{}"
-    );
-    const shop_id = selected_shop?.id || "";
-
-    if (!userId || !user_name || !user_email || !user_mobile) {
-      alert("User information missing.");
-      return;
-    }
-    if (!activePickup) {
-      alert("Please select pickup location.");
-      return;
-    }
-    if (cartItems.length === 0) {
-      alert("Cart is empty.");
-      return;
-    }
-
-    const onlineAmount = baseTotal - walletUsed;
-
-    const formData = new FormData();
-    formData.append("name", user_name);
-    formData.append("email", user_email);
-    formData.append("mobile", user_mobile);
-    formData.append("user_id", userId);
-    formData.append("payment_type", paymentType);
-    formData.append("transaction_id", transactionId);
-    formData.append("order_time", new Date().toISOString());
-    formData.append("table_no", "");
-    formData.append("device_id", deviceId);
-    formData.append("order_date", new Date().toISOString().split("T")[0]);
-    formData.append("shop_id", shop_id);
-    formData.append("wallet_amount", walletUsed.toFixed(2));
-    formData.append("online_amount", onlineAmount.toFixed(2));
-    formData.append("order_type", getOrderType());
-    formData.append("tips", Number(tipValue).toFixed(2));
-
-    try {
-      const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/createOrder",
-        { method: "POST", body: formData }
-      );
-      const data = await res.json();
-      if (data.status === 1 || data.status === "1") {
-        router.push(`/order-success/${data.order_id}`);
-        await fetchWalletBalance();
-      } else {
-        alert(data.message || "Order failed");
-      }
-    } catch {
-      alert("Something went wrong while creating order.");
-    }
+  const getUserInfo = () => {
+    return {
+      user_name: getLocalStorage("user_name") || "Guest",
+      user_email:
+        getLocalStorage("user_email") || "user@liquiditybars.com",
+      user_mobile:
+        getLocalStorage("user_mobile") || "+10000000000",
+    };
   };
 
-  const payWithWallet = async () => {
-    if (!userId || !activePickup) {
-      alert("Missing required information.");
-      return;
-    }
-    if (walletBalance < baseTotal) {
-      alert(
-        `Insufficient Liquidity Cash. Need $${baseTotal.toFixed(
-          2
-        )}, have $${walletBalance.toFixed(2)}`
-      );
-      return;
-    }
-    try {
-      const transactionId = `LIQUIDITY_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-      await createLiquidityOrder(transactionId, baseTotal, "2");
-    } catch (err) {
-      console.error(err);
-      alert("Wallet payment failed.");
-    }
-  };
-
-  const initStripePaymentIntent = async () => {
-    if (!userId || !activePickup) {
-      alert("Missing required information.");
+  const initStripePayment = async () => {
+    if (!deviceId) {
+      alert("Missing device ID.");
       return false;
     }
-    if (remainingAmount <= 0) {
-      await payWithWallet();
-      return true;
-    }
+
     setInitializingPayment(true);
+
     try {
-      const amount = Math.round(remainingAmount * 100);
+      const amount = Math.round(totalAmount * 100);
       const res = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount,
           currency: "cad",
-          user_id: userId,
-          wallet_used: walletAmountToUse,
+          device_id: deviceId,
         }),
       });
+
       const data = await res.json();
       if (!data.client_secret) {
         alert(data.error || "Failed to start payment.");
         setInitializingPayment(false);
         return false;
       }
+
       setClientSecret(data.client_secret);
       return true;
     } catch (err) {
@@ -833,117 +568,121 @@ export default function Cart() {
     }
   };
 
-  
+  const createLiquidityOrder = async (
+    transactionId: string,
+    walletUsed: number = 0,
+    paymentType: string = "1"
+  ) => {
+    const { user_name, user_email, user_mobile } = getUserInfo();
+    const currentShopId = getShopId();
 
-  const AcknowledgementPopup = () => (
-    <div className="fixed top-0 left-0 w-full h-full bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-white w-11/12 max-w-md p-5 rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-4">Acknowledgement</h2>
-        <p className="text-gray-700 mb-5">
-          I understand that it is my responsibility to pick up my drink when it
-          is ready, and that failure to do so in a timely manner means my drink
-          could get stolen or disposed of by the bar.
-        </p>
-        <div className="flex flex-col gap-3">
-          <button
-            className="bg-primary text-white p-3 rounded-lg"
-            onClick={async () => {
-              setShowAcknowledgement(false);
-              if (payMode === "wallet") {
-                await payWithWallet();
-              } else if (payMode === "new_card") {
-                await initStripePaymentIntent();
-              }
-            }}
-          >
-            I Understand
-          </button>
-          <button
-            className="bg-green-600 text-white p-3 rounded-lg"
-            onClick={async () => {
-              localStorage.setItem("ack_skip_popup", "1");
-              setShowAcknowledgement(false);
-              if (payMode === "wallet") {
-                await payWithWallet();
-              } else if (payMode === "new_card") {
-                await initStripePaymentIntent();
-              }
-            }}
-          >
-            Yes, Don't Show Again
-          </button>
-          <button
-            className="bg-gray-300 text-black p-3 rounded-lg"
-            onClick={() => setShowAcknowledgement(false)}
-          >
-            No, Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    if (!deviceId || cartItems.length === 0) {
+      alert("Missing device ID or empty cart.");
+      return;
+    }
 
-  // FIXED: Skip Apple Pay from main checkout (uses own button)
-  // const handleCheckout = async (e: FormEvent) => {
-  //   e.preventDefault();
-    
-  //   // Apple Pay uses its own button - don't process here
-  //   if (payMode === "apple_pay") return;
+    const orderType = getOrderType();
 
-  //   const skip = localStorage.getItem("ack_skip_popup");
-  //   if (!skip) {
-  //     setShowAcknowledgement(true);
-  //     return;
-  //   }
+    const formData = new FormData();
+    formData.append("name", user_name);
+    formData.append("email", user_email);
+    formData.append("mobile", user_mobile);
+    formData.append("device_id", deviceId);
+    formData.append("payment_type", paymentType);
+    formData.append("transaction_id", transactionId);
+    formData.append("order_time", new Date().toISOString());
+    formData.append("table_no", tableNo);
+    formData.append("order_date", getTodayDate());
+    formData.append("shop_id", currentShopId);
+    formData.append("wallet_amount", walletUsed.toFixed(2));
+    formData.append("online_amount", totalAmount.toFixed(2));
+    formData.append("order_type", orderType);
+    formData.append("tips", Number(tipValue).toFixed(2));
 
-  //   if (payMode === "wallet") {
-  //     await payWithWallet();
-  //   } else if (payMode === "new_card") {
-  //     await initStripePaymentIntent();
-  //   }
-  // };
+    try {
+      const res = await fetch(
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/createTblOrder",
+        { method: "POST", body: formData }
+      );
+      const data = await res.json();
+
+      if (data.status === 1 || data.status === "1") {
+        if (orderType === "1") {
+          router.push(`/bar-order-success/${data.order_id}`);
+        } else {
+          router.push(`/table-order-success/${data.order_id}`);
+        }
+      } else {
+        alert(data.message || "Order failed");
+      }
+    } catch {
+      alert("Something went wrong while creating order.");
+    }
+  };
+
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
+    await createLiquidityOrder(paymentIntentId);
+  };
 
   const handleCheckout = async (e: FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!isCartValid) {
-    alert("Your cart is empty.");
-    return;
-  }
+    if (payMode === "apple_pay") return;
 
-  if (!isPickupSelected) {
-    alert("Please select pickup location.");
-    return;
-  }
+    if (payMode === "new_card" && !clientSecret) {
+      await initStripePayment();
+    }
+  };
 
-  if (payMode === "wallet" && !canUseWalletFull) {
-    alert("Insufficient wallet balance.");
-    return;
-  }
+  const hasTableNumber = !!getLocalStorage("table_number");
+  const currentShopId = getShopId();
+  const restaurantLink = hasTableNumber
+    ? `/restaurant/${currentShopId}?table=${tableNo}`
+    : `/restaurant/${currentShopId}`;
 
-  if (payMode === "wallet") {
-    await payWithWallet();
-  } 
-  else {
-    await initStripePaymentIntent();
-  }
-};
+  const handleBack = () => {
+    const shopId = getShopId();
+    const tableNoLocal =
+      getLocalStorage("table_no") || getLocalStorage("table_number");
 
-  const canUseWallet = walletBalance > 0;
+    if (shopId && tableNoLocal) {
+      router.push(`/restaurant/${shopId}?table=${tableNoLocal}`);
+    } else if (shopId) {
+      router.push(`/restaurant/${shopId}`);
+    } else {
+      router.push("/restaurant");
+    }
+  };
 
   return (
     <>
-      {showAcknowledgement && <AcknowledgementPopup />}
+      <header className="header">
+        <button type="button" className="icon_only" onClick={handleBack}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M15 6L9 12L15 18"
+              stroke="black"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <div className="pageTitle">{shopName || "Menu"}</div>
+        <button type="button" className="icon_only"></button>
+      </header>
 
-      <Header title="Casa Mezcal" />
-
-      <section className="pageWrapper hasHeader hasFooter">
+      <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          {/* Cart */}
+          {/* Cart Items */}
           {loading ? (
-            <p className="p-4 text-center text-gray-500">Loading cart...</p>
+            <p className="p-4 text-center text-gray-500">
+              Loading cart...
+            </p>
           ) : cartItems.length === 0 ? (
-            <p className="p-4 text-center text-gray-500">Cart is empty</p>
+            <p className="p-4 text-center text-gray-500">
+              Cart is empty
+            </p>
           ) : (
             <>
               {cartItems.map((item) => (
@@ -960,7 +699,8 @@ export default function Cart() {
                     )}
                     {item.is_double_shot && (
                       <p>
-                        <strong>Additional shots:</strong> {item.shot_count}
+                        <strong>Additional shots:</strong>{" "}
+                        {item.shot_count}
                       </p>
                     )}
                     {item.special_instruction && (
@@ -972,6 +712,7 @@ export default function Cart() {
                   </div>
                   <div className={styles.itemRight}>
                     <h4>
+                      $
                       {(
                         Number(item.price) * Number(item.quantity)
                       ).toFixed(2)}
@@ -980,78 +721,68 @@ export default function Cart() {
                       min={0}
                       max={10}
                       initialValue={Number(item.quantity)}
-                      onChange={(val) => updateQuantity(item.id, val)}
+                      onChange={(val) =>
+                        updateQuantity(item.id, val)
+                      }
                       onDelete={() => removeItem(item.id)}
                     />
                   </div>
                 </div>
               ))}
               <div className={styles.itemCard}>
-                <Link href="/outlet-menu" className={styles.addItemButton}>
+                <Link href={restaurantLink} className={styles.addItemButton}>
                   + Add Items
                 </Link>
               </div>
             </>
           )}
 
-          {/* Pickup */}
-          <div className={styles.pickupArea}>
-            <h4 className="text-lg font-semibold mb-3">Pickup Location</h4>
-            <div className={`${styles.pickupBlock} flex gap-3`}>
-              {[
-                { id: "lounge", label: "1st Floor\nLounge" },
-                { id: "dance", label: "2nd Floor\nDance Floor" },
-                { id: "nightclub", label: "Basement\nNightclub" },
-              ].map((loc) => (
-                <button
-                  key={loc.id}
-                  type="button"
-                  onClick={() => setActivePickup(loc.id)}
-                  className={`${styles.pickupItem} ${
-                    activePickup === loc.id ? "bg-primary text-white" : ""
-                  }`}
-                >
-                  {loc.label.split("\n").map((line, i) => (
-                    <span key={i} className="block">
-                      {line}
-                    </span>
-                  ))}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Billing + Payment */}
+          {/* Billing Summary + Payment */}
           <Elements
             stripe={stripePromise}
             options={clientSecret ? { clientSecret } : undefined}
           >
             <div className={styles.billingArea}>
-              <h4 className="text-lg font-semibold mb-3">Billing Summary</h4>
+              <h4 className="text-lg font-semibold mb-4">
+                Billing Summary
+              </h4>
+
+              {loading ? (
+                <p className="p-2 text-center text-gray-500 text-sm">
+                  Loading...
+                </p>
+              ) : cartItems.length === 0 ? (
+                <p className="p-2 text-center text-gray-500 text-sm">
+                  No items
+                </p>
+              ) : (
+                <div>
+                  {cartItems.map((item) => (
+                    <div key={item.id} className={styles.billingItem}>
+                      <div className={styles.itemleft}>
+                        <p>
+                          {item.product_name}{" "}
+                          <span className="text-xs">(1oz)</span>
+                        </p>
+                      </div>
+                      <div className={styles.itemRight}>
+                        <p>
+                          $
+                          {(
+                            Number(item.price) *
+                            Number(item.quantity)
+                          ).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className={styles.billingItem}>
                 <p>Subtotal</p>
                 <p>${cartTotal.toFixed(2)}</p>
               </div>
-
-              {walletLoading ? (
-                <div className={styles.billingItem}>
-                  <p>Liquidity Cash</p>
-                  <p>Loading...</p>
-                </div>
-              ) : walletBalance > 0 ? (
-                <div className={styles.billingItem}>
-                  <p>Liquidity Cash</p>
-                  <p className="text-green-600 font-semibold">
-                    -${walletAmountToUse.toFixed(2)}
-                  </p>
-                </div>
-              ) : (
-                <div className={styles.billingItem}>
-                  <p>Liquidity Cash</p>
-                  <p className="text-gray-500">$0.00</p>
-                </div>
-              )}
 
               <div className={styles.billingItem}>
                 <p>Taxes &amp; Other Fees</p>
@@ -1069,117 +800,6 @@ export default function Cart() {
               </div>
 
               <div className="mt-6 grid grid-cols-1 gap-3">
-
-                {/* FULL WALLET */}
-                <button
-                  type="button"
-                  onClick={() => setPayMode("wallet")}
-                  disabled={!canUseWalletFull}
-                  className={`py-3 px-4 rounded-lg font-medium border transition ${
-                    payMode === "wallet"
-                      ? "bg-green-600 text-white border-green-600 shadow-lg"
-                      : canUseWalletFull
-                      ? "bg-white border-gray-300 hover:bg-green-50"
-                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                  }`}
-                >
-                  {canUseWalletFull
-                    ? `Pay $${finalTotalAmount} with Wallet`
-                    : `Wallet Balance $${walletBalance.toFixed(2)} (Insufficient)`}
-                </button>
-
-                {/* FULL CARD */}
-                <button
-                  type="button"
-                  onClick={() => setPayMode("new_card")}
-                  disabled={!isCartValid}
-                  className={`py-3 px-4 rounded-lg font-medium border transition ${
-                    payMode === "new_card"
-                      ? "bg-primary text-white border-primary shadow-lg"
-                      : "bg-white border-gray-300 hover:bg-primary/5"
-                  }`}
-                >
-                  Pay ${finalTotalAmount} with Card
-                </button>
-
-                {/* FULL APPLE PAY */}
-                <button
-                  type="button"
-                  onClick={() => setPayMode("apple_pay")}
-                  disabled={!isCartValid}
-                  className={`py-3 px-4 rounded-lg font-medium border transition ${
-                    payMode === "apple_pay"
-                      ? "bg-black text-white border-black shadow-lg"
-                      : "bg-white border-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                   Pay ${finalTotalAmount} with Apple Pay
-                </button>
-
-                {/* SPLIT CARD */}
-                <button
-                  type="button"
-                  onClick={() => setPayMode("split_card")}
-                  disabled={!canUseSplit}
-                  className={`py-3 px-4 rounded-lg font-medium border transition ${
-                    payMode === "split_card"
-                      ? "bg-purple-600 text-white border-purple-600 shadow-lg"
-                      : canUseSplit
-                      ? "bg-white border-gray-300 hover:bg-purple-50"
-                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                  }`}
-                >
-                  {canUseSplit
-                    ? `Wallet $${walletAmountToUse.toFixed(
-                        2
-                      )} + Card $${remainingAmount.toFixed(2)}`
-                    : "Split not available"}
-                </button>
-
-                {/* SPLIT APPLE PAY */}
-                <button
-                  type="button"
-                  onClick={() => setPayMode("split_apple")}
-                  disabled={!canUseSplit}
-                  className={`py-3 px-4 rounded-lg font-medium border transition ${
-                    payMode === "split_apple"
-                      ? "bg-purple-600 text-white border-purple-600 shadow-lg"
-                      : canUseSplit
-                      ? "bg-white border-gray-300 hover:bg-purple-50"
-                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                  }`}
-                >
-                  {canUseSplit
-                    ? `Wallet $${walletAmountToUse.toFixed(
-                        2
-                      )} + Apple Pay  $${remainingAmount.toFixed(2)}`
-                    : "Split not available"}
-                </button>
-
-              </div>
-
-              {/* Payment Mode */}
-              {/* <div className="mt-6 grid grid-cols-1 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPayMode("wallet")}
-                  disabled={!canUseWallet || walletBalance < baseTotal}
-                  className={`flex items-center gap-2 py-3 px-4 rounded-lg font-medium border transition-all ${
-                    payMode === "wallet"
-                      ? "bg-green-600 text-white border-green-600 shadow-lg"
-                      : !canUseWallet || walletBalance < baseTotal
-                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-green-400 hover:bg-green-50"
-                  }`}
-                >
-                  <Wallet className="w-5 h-5" />
-                  {walletBalance >= baseTotal
-                    ? `Liquidity Cash (Full Coverage $${finalTotalAmount})`
-                    : `Liquidity Cash ($${walletBalance.toFixed(
-                        2
-                      )} available)`}
-                </button>
-
                 <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
@@ -1189,9 +809,7 @@ export default function Cart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
                   }`}
                 >
-                  {remainingAmount > 0
-                    ? `Card ($${remainingAmount.toFixed(2)} + Cash)`
-                    : "Card"}
+                  Pay ${finalTotalAmount} with Card
                 </button>
 
                 <button
@@ -1199,86 +817,27 @@ export default function Cart() {
                   onClick={() => setPayMode("apple_pay")}
                   className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
                     payMode === "apple_pay"
-                      ? "bg-black text-white border-black shadow-lg"
+                      ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
                       : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
                   }`}
                 >
-                   Apple Pay
+                  Pay ${finalTotalAmount} with Apple Pay / GPay
                 </button>
-              </div> */}
+              </div>
 
-
-              {(payMode === "new_card" || payMode === "split_card") && clientSecret && (
+              {payMode === "new_card" && clientSecret && (
                 <NewCardPaymentForm
                   clientSecret={clientSecret}
-                  amountLabel={`$${remainingAmount.toFixed(2)}`}
-                  onSuccess={(paymentIntentId) =>
-                    createLiquidityOrder(
-                      paymentIntentId,
-                      walletAmountToUse,
-                      "1"
-                    )
-                  }
+                  amountLabel={`$${finalTotalAmount}`}
+                  onSuccess={handlePaymentSuccess}
                 />
               )}
 
-              {/* {(payMode === "apple_pay" || payMode === "split_apple") &&
-  remainingAmount > 0 && (
-                  <div className="mt-4">
-                    <ApplePayButton
-                      amountCents={Math.round(remainingAmount * 100)}
-                      onSuccess={(transactionId) =>
-                        createLiquidityOrder(
-                          transactionId,
-                          walletAmountToUse,
-                          "1"
-                        )
-                      }
-                    />
-                  </div>
-                )} */}
-
-
-              
-              {/* New Card Form */}
-              {/* {payMode === "new_card" && clientSecret && (
-                <NewCardPaymentForm
-                  clientSecret={clientSecret}
-                  amountLabel={`$${remainingAmount.toFixed(2)}`}
-                  onSuccess={(paymentIntentId) =>
-                    createLiquidityOrder(
-                      paymentIntentId,
-                      walletAmountToUse,
-                      "1"
-                    )
-                  }
-                />
-              )} */}
-
-              {/* FIXED Apple Pay - Only render when ready + stable */}
-              {/* {payMode === "apple_pay" && remainingAmount > 0 && applePayReady && (
-                <div className="mt-4">
-                  <ApplePayButton
-                    amountCents={Math.round(remainingAmount * 100)}
-                    onSuccess={(transactionId) =>
-                      createLiquidityOrder(
-                        transactionId,
-                        walletAmountToUse,
-                        "1"
-                      )
-                    }
-                  />
-                </div>
-              )} */}
-
               <StripeApplePayWrapper
-  payMode={payMode}
-  remainingAmount={remainingAmount}
-  walletAmountToUse={walletAmountToUse}
-  createLiquidityOrder={createLiquidityOrder}
-/>
-
-
+                payMode={payMode}
+                remainingAmount={remainingAmount}
+                createLiquidityOrder={createLiquidityOrder}
+              />
             </div>
           </Elements>
 
@@ -1291,75 +850,69 @@ export default function Cart() {
             }}
           />
 
+          {/* MAIN CHECKOUT BUTTON (card only) */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
-              {payMode === "wallet" && (
-                <button
-                  type="submit"
-                  disabled={
-                    !activePickup ||
-                    cartItems.length === 0 ||
-                    walletLoading ||
-                    walletBalance < baseTotal
-                  }
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    !activePickup ||
-                    cartItems.length === 0 ||
-                    walletLoading ||
-                    walletBalance < baseTotal
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-green-600 text-white hover:bg-green-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+              <button
+                type="submit"
+                disabled={
+                  cartItems.length === 0 || initializingPayment || loading
+                }
+                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
+                  cartItems.length === 0 ||
+                  initializingPayment ||
+                  loading
+                    ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50"
+                    : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
+                }`}
+              >
+                <div
+                  className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+                    initializingPayment
+                      ? "scale-100 opacity-100"
+                      : "scale-0 opacity-0"
                   }`}
                 >
-                  {walletLoading ? (
+                  {initializingPayment && (
+                    <div className="text-center text-white px-4">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+                      <div className="text-sm font-medium">
+                        {clientSecret
+                          ? "Starting Payment..."
+                          : "Initializing Payment..."}
+                      </div>
+                      <div className="text-xs mt-1 opacity-90">
+                        Please wait
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <span
+                  className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+                    initializingPayment
+                      ? "opacity-0 scale-95 pointer-events-none"
+                      : "opacity-100 scale-100"
+                  }`}
+                >
+                  {loading ? (
                     <>
-                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
+                      <Loader2 className="w-6 h-6 animate-spin mr-2" />
                       Loading...
                     </>
+                  ) : cartItems.length === 0 ? (
+                    "Empty Cart"
+                  ) : !clientSecret ? (
+                    `Pay $${finalTotalAmount}`
                   ) : (
-                    `Pay Full $${finalTotalAmount} with Liquidity Cash`
+                    "Confirm Payment"
                   )}
-                </button>
-              )}
-
-              {(payMode === "new_card" || payMode === "split_card") && !clientSecret && (
-                <button
-                  type="submit"
-                  disabled={
-                    initializingPayment ||
-                    !activePickup ||
-                    cartItems.length === 0
-                  }
-                  className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${
-                    initializingPayment ||
-                    !activePickup ||
-                    cartItems.length === 0
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                      : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
-                  }`}
-                >
-                  {initializingPayment ? (
-                    <>
-                      <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
-                      Starting payment...
-                    </>
-                  ) : remainingAmount > 0 ? (
-                    `Pay $${remainingAmount.toFixed(2)} (Cash + Card)`
-                  ) : (
-                    `Pay Full $${finalTotalAmount} with Liquidity Cash`
-                  )}
-                </button>
-              )}
-
-              
-
-              {/* No checkout button for Apple Pay - uses its own */}
+                </span>
+              </button>
             </form>
           </div>
         </div>
       </section>
-
-      <BottomNavigation />
     </>
   );
 }
