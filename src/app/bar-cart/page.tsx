@@ -89,7 +89,7 @@ function StripeApplePayWrapper({
 
   return (
     <div className="mt-4">
-      <ApplePayButton
+      <StripeApplePayButton
         amount={remainingAmount}
         onSuccess={(paymentIntentId) =>
           createLiquidityOrder(paymentIntentId, walletAmountToUse, "1")
@@ -99,7 +99,7 @@ function StripeApplePayWrapper({
   );
 }
 
-function ApplePayButton({
+function StripeApplePayButton({
   amount,
   onSuccess,
 }: {
@@ -286,6 +286,241 @@ function NewCardPaymentForm({
         </span>
       </button>
     </form>
+  );
+}
+
+
+/* ---------- Apple Pay JS (FIXED VERSION) ---------- */
+
+declare global {
+  interface Window {
+    ApplePaySession?: any;
+  }
+}
+
+function ApplePayButton({
+  amountCents,
+  onSuccess,
+}: {
+  amountCents: number;
+  onSuccess: (transactionId: string) => Promise<void>;
+}) {
+  const [supported, setSupported] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  // Cleanup previous session on unmount
+  useEffect(() => {
+    return () => {
+      if (session) {
+        session.abort();
+      }
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.ApplePaySession) return;
+    
+    const canPay = window.ApplePaySession.canMakePayments();
+    if (canPay) setSupported(true);
+  }, []);
+
+  const startApplePay = useCallback(async () => {
+    // Prevent multiple calls
+
+    let isSessionActive = true;
+
+    if (processing || !window.ApplePaySession || session) {
+      console.log("Apple Pay blocked: already processing or session active");
+      return;
+    }
+
+    console.log("Starting Apple Pay session");
+    console.log("Apple Pay Debug:", {
+  amountCents,
+  displayAmount: (amountCents / 100).toFixed(2),
+  });
+    setProcessing(true);
+
+    const request: any = {
+      countryCode: "CA",
+      currencyCode: "CAD",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: (amountCents / 100).toFixed(2),
+      },
+      merchantCapabilities: ["supports3DS"],
+      supportedNetworks: ["visa", "masterCard", "amex"],
+    };
+
+    const newSession = new window.ApplePaySession(3, request);
+    setSession(newSession);
+
+    newSession.onvalidatemerchant = async (event: any) => {
+      console.log("Apple Pay: validating merchant");
+      try {
+        const res = await fetch("/api/apple-pay/validate-merchant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ validationURL: event.validationURL }),
+        });
+        
+        if (!res.ok) {
+          console.error("Merchant validation failed, HTTP", res.status);
+          newSession.abort();
+          setProcessing(false);
+          setSession(null);
+          return;
+        }
+        
+        const merchantSession = await res.json();
+        newSession.completeMerchantValidation(merchantSession);
+      } catch (err) {
+        console.error("Apple Pay merchant validation error:", err);
+        newSession.abort();
+        setProcessing(false);
+        setSession(null);
+      }
+    };
+
+    newSession.onpaymentauthorized = async (event: any) => {
+  console.log("Apple Pay: processing payment");
+
+  if (!isSessionActive) return;
+
+  try {
+    const token = event.payment.token?.paymentData;
+
+    if (!token) {
+      console.error("No Apple Pay token");
+
+      if (isSessionActive) {
+        try {
+          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+        } catch (e) {
+          console.log("Session already closed (token missing)");
+        }
+      }
+
+      if (isSessionActive) {
+        setProcessing(false);
+        setSession(null);
+      }
+
+      return;
+    }
+
+    const res = await fetch("/api/apple-pay/charge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        amount: amountCents,
+      }),
+    });
+
+    if (!isSessionActive) return;
+
+    const data = await res.json();
+    console.log("Apple Pay charge response:", data);
+
+    if (data.status === "success" && data.transaction_id) {
+
+      if (isSessionActive) {
+        try {
+          newSession.completePayment(window.ApplePaySession.STATUS_SUCCESS);
+        } catch (e) {
+          console.log("Session already closed (success)");
+        }
+      }
+
+      if (isSessionActive) {
+        setProcessing(false);
+        setSession(null);
+      }
+
+      await onSuccess(data.transaction_id);
+
+    } else {
+
+      if (isSessionActive) {
+        try {
+          newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+        } catch (e) {
+          console.log("Session already closed (failure)");
+        }
+      }
+
+      if (isSessionActive) {
+        setProcessing(false);
+        setSession(null);
+      }
+
+      alert(data.message || "Apple Pay payment failed.");
+    }
+
+  } catch (err) {
+    console.error("Apple Pay charge error:", err);
+
+    if (isSessionActive) {
+      try {
+        newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+      } catch (e) {
+        console.log("Session already closed (exception)");
+      }
+    }
+
+    if (isSessionActive) {
+      setProcessing(false);
+      setSession(null);
+    }
+
+    alert("Apple Pay payment failed.");
+    }
+  };
+    newSession.oncancel = () => {
+      console.log("Apple Pay: cancelled by user");
+      isSessionActive = false;
+      setProcessing(false);
+      setSession(null);
+    };
+
+    newSession.begin();
+  }, [amountCents, onSuccess, processing, session]);
+
+  if (!supported) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="py-3 px-4 rounded-lg font-medium border bg-gray-200 text-gray-500 w-full"
+      >
+        Apple Pay not available on this device
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startApplePay}
+      disabled={processing}
+      className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full ${
+        processing
+          ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+          : "bg-black text-white border-black shadow-lg hover:bg-gray-900"
+      }`}
+    >
+      {processing ? (
+        <>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          Processing Apple Pay…
+        </>
+      ) : (
+        <> Pay with Apple Pay Now</>
+      )}
+    </button>
   );
 }
 
