@@ -285,11 +285,14 @@ export default function RestaurantCart() {
   const [payMode, setPayMode] = useState<PayMode>("new_card");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initializingPayment, setInitializingPayment] = useState(false);
+  const [remainingAmount, setRemainingAmount] = useState(0);     // ✅ MOVED HERE
+  const [walletAmountToUse, setWalletAmountToUse] = useState(0); // ✅ MOVED HERE
 
   // Tips states
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
+
 
   
 
@@ -473,9 +476,9 @@ export default function RestaurantCart() {
   const totalAmount = cartTotal + taxes + tipValue;
   const finalTotalAmount = totalAmount.toFixed(2);
 
-
-  const [remainingAmount, setRemainingAmount] = useState(totalAmount);
-    const [walletAmountToUse, setWalletAmountToUse] = useState(0);
+  useEffect(() => {
+  setRemainingAmount(totalAmount);
+}, [totalAmount, tipPercent, tipAmount, tipIsAmount, cartTotal]);
 
   const getOrderType = (): string => {
     return getLocalStorage("table_number") ? "2" : "1";
@@ -528,7 +531,7 @@ export default function RestaurantCart() {
   };
 
   // ✅ FIXED: Button stays disabled until redirect
-  const createLiquidityOrder = async (transactionId: string) => {
+  const createLiquidityOrder = async (transactionId: string, walletUsed: number = 0, paymentType: string = "1") => {
     const { user_name, user_email, user_mobile } = getUserInfo();
     const currentShopId = getShopId();
 
@@ -775,12 +778,14 @@ export default function RestaurantCart() {
   />
 )}
 
+
 <StripeApplePayWrapper
   payMode={payMode}
-  remainingAmount={remainingAmount}
-  walletAmountToUse={0}
+  remainingAmount={remainingAmount}    // ✅ Now > 0
+  walletAmountToUse={walletAmountToUse} // ✅ 0
   createLiquidityOrder={createLiquidityOrder}
 />
+
             </div>
           </Elements>
 
