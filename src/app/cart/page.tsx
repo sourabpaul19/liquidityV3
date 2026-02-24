@@ -107,9 +107,14 @@ function StripeApplePayButton({
       requestPayerEmail: true,
     });
 
+    // pr.canMakePayment().then((result: any) => {
+    //   if (result) setPaymentRequest(pr);
+    // });
     pr.canMakePayment().then((result: any) => {
+      console.log("PR canMakePayment result:", result);
       if (result) setPaymentRequest(pr);
     });
+
 
     pr.on("paymentmethod", async (ev: any) => {
       try {
