@@ -5,11 +5,9 @@ import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
-// ADD PaymentRequestButtonElement
 import {
   Elements,
   CardElement,
-  PaymentRequestButtonElement,  // ← NEW
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
@@ -61,133 +59,258 @@ interface Order {
   products: OrderProduct[];
 }
 
-//type PayMode = "new_card" | "saved_card";
-type PayMode = "new_card" | "apple_pay";  // ← SIMPLIFIED (removed wallet/split)
+type PayMode = "new_card" | "apple_pay";
 
+// ---------- ApplePaySession types ----------
+declare global {
+  interface Window {
+    ApplePaySession?: any;
+  }
+}
 
-const TipsSelector = dynamic(
-  () => import("@/components/common/TipsSelector/TipsSelector"),
-  { ssr: false }
-);
+// ---------- Apple Pay Button (same logic as attached cart) ----------
+function ApplePayButton({
+  amountCents,
+  onSuccess,
+}: {
+  amountCents: number;
+  onSuccess: (transactionId: string) => Promise<void>;
+}) {
+  const [supported, setSupported] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [session, setSession] = useState<any | null>(null);
+
+  // Cleanup previous session on unmount
+  useEffect(() => {
+    return () => {
+      if (session) {
+        try {
+          session.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.ApplePaySession) return;
+
+    const canPay = window.ApplePaySession.canMakePayments();
+    if (canPay) setSupported(true);
+  }, []);
+
+  const startApplePay = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    if (!window.ApplePaySession) return;
+    if (processing || session) {
+      console.log("Apple Pay blocked: already processing or session active");
+      return;
+    }
+
+    console.log("Apple Pay Debug:", {
+      amountCents,
+      displayAmount: (amountCents / 100).toFixed(2),
+    });
+
+    setProcessing(true);
+
+    const request: any = {
+      countryCode: "CA",
+      currencyCode: "CAD",
+      total: {
+        label: "Liquidity Bars Order",
+        amount: (amountCents / 100).toFixed(2),
+      },
+      merchantCapabilities: ["supports3DS"],
+      supportedNetworks: ["visa", "masterCard", "amex"],
+    };
+
+    const newSession = new window.ApplePaySession(3, request);
+    setSession(newSession);
+    let isSessionActive = true;
+
+    // Merchant validation
+    newSession.onvalidatemerchant = async (event: any) => {
+      console.log("Apple Pay validating merchant");
+      try {
+        const res = await fetch("/api/apple-pay-validate-merchant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ validationURL: event.validationURL }),
+        });
+
+        if (!res.ok) {
+          console.error("Merchant validation failed, HTTP:", res.status);
+          newSession.abort();
+          setProcessing(false);
+          setSession(null);
+          return;
+        }
+
+        const merchantSession = await res.json();
+        newSession.completeMerchantValidation(merchantSession);
+      } catch (err) {
+        console.error("Apple Pay merchant validation error:", err);
+        newSession.abort();
+        setProcessing(false);
+        setSession(null);
+      }
+    };
+
+    // Payment authorized
+    newSession.onpaymentauthorized = async (event: any) => {
+      console.log("Apple Pay processing payment");
+      if (!isSessionActive) return;
+
+      try {
+        const token = event.payment.token?.paymentData;
+        if (!token) {
+          console.error("No Apple Pay token");
+          try {
+            if (isSessionActive) {
+              newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+            }
+          } catch {
+            // ignore
+          }
+          if (isSessionActive) {
+            setProcessing(false);
+            setSession(null);
+          }
+          return;
+        }
+
+        const res = await fetch("/api/apple-pay-charge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token,
+            amount: amountCents,
+            currency: "cad",
+          }),
+        });
+
+        if (!isSessionActive) return;
+        const data = await res.json();
+        console.log("Apple Pay charge response:", data);
+
+        if (data.status === "success" && data.transaction_id) {
+          try {
+            if (isSessionActive) {
+              newSession.completePayment(
+                window.ApplePaySession.STATUS_SUCCESS
+              );
+            }
+          } catch {
+            // ignore
+          }
+          if (isSessionActive) {
+            setProcessing(false);
+            setSession(null);
+          }
+          await onSuccess(data.transaction_id);
+        } else {
+          try {
+            if (isSessionActive) {
+              newSession.completePayment(
+                window.ApplePaySession.STATUS_FAILURE
+              );
+            }
+          } catch {
+            // ignore
+          }
+          if (isSessionActive) {
+            setProcessing(false);
+            setSession(null);
+          }
+          alert(data.message || "Apple Pay payment failed.");
+        }
+      } catch (err) {
+        console.error("Apple Pay charge error:", err);
+        try {
+          if (isSessionActive) {
+            newSession.completePayment(window.ApplePaySession.STATUS_FAILURE);
+          }
+        } catch {
+          // ignore
+        }
+        if (isSessionActive) {
+          setProcessing(false);
+          setSession(null);
+        }
+        alert("Apple Pay payment failed.");
+      }
+    };
+
+    newSession.oncancel = () => {
+      console.log("Apple Pay cancelled by user");
+      isSessionActive = false;
+      setProcessing(false);
+      setSession(null);
+    };
+
+    newSession.begin();
+  }, [amountCents, processing, session]);
+
+  if (!supported) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="py-3 px-4 rounded-lg font-medium border bg-gray-200 text-gray-500 w-full"
+      >
+        Apple Pay not available on this device
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startApplePay}
+      disabled={processing}
+      className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center w-full ${
+        processing
+          ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+          : "bg-black text-white border-black shadow-lg hover:bg-gray-900"
+      }`}
+    >
+      {processing && (
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+      )}
+      Pay with Apple Pay
+    </button>
+  );
+}
+
+// ---------- Wrapper to show ApplePayButton only when mode/amount valid ----------
 function StripeApplePayWrapper({
   payMode,
   remainingAmount,
-  walletAmountToUse,
   createLiquidityOrder,
 }: {
   payMode: PayMode;
   remainingAmount: number;
-  walletAmountToUse: number;
   createLiquidityOrder: (id: string, walletUsed: number, paymentType: string) => Promise<void>;
 }) {
-  const stripe = useStripe();
-
-  // ✅ FIXED: Only check apple_pay (NO split_apple)
   if (payMode !== "apple_pay") return null;
-  if (!stripe) return null;
   if (remainingAmount <= 0) return null;
 
   return (
     <div className="mt-4">
       <ApplePayButton
-        amount={remainingAmount}
-        onSuccess={(paymentIntentId) =>
-          createLiquidityOrder(paymentIntentId, walletAmountToUse, "1")
+        amountCents={Math.round(remainingAmount * 100)}
+        onSuccess={(transactionId) =>
+          createLiquidityOrder(transactionId, 0, "1")
         }
       />
     </div>
   );
 }
 
-function ApplePayButton({
-  amount,
-  onSuccess,
-}: {
-  amount: number;
-  onSuccess: (id: string) => Promise<void>;
-}) {
-  const stripe = useStripe();
-  const [paymentRequest, setPaymentRequest] = useState<any>(null);
-  const [isApplePaySupported, setIsApplePaySupported] = useState(false); // ✅ NEW
-
-  useEffect(() => {
-    if (!stripe || amount <= 0) return;
-
-    const pr = stripe.paymentRequest({
-      country: "CA",
-      currency: "cad",
-      total: { label: "Liquidity Bars Order", amount: Math.round(amount * 100) },
-      requestPayerName: true,
-      requestPayerEmail: true,
-    });
-
-    // ✅ CHECK SUPPORT + SHOW STATUS
-    pr.canMakePayment().then((result: any) => {
-      console.log("Apple Pay supported:", result); // Debug
-      setIsApplePaySupported(!!result);
-      if (result) setPaymentRequest(pr);
-    });
-
-    pr.on("paymentmethod", async (ev: any) => {
-      try {
-        const res = await fetch("/api/create-payment-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: Math.round(amount * 100),
-            currency: "cad",
-            device_id: localStorage.getItem("device_id"),
-          }),
-        });
-        const data = await res.json();
-
-        const { paymentIntent, error } = await stripe.confirmCardPayment(
-          data.client_secret,
-          { payment_method: ev.paymentMethod.id }
-        );
-
-        if (error) {
-          ev.complete("fail");
-          return;
-        }
-
-        ev.complete("success");
-        await onSuccess(paymentIntent.id);
-      } catch (err) {
-        console.error("Apple Pay error:", err);
-        ev.complete("fail");
-      }
-    });
-  }, [stripe, amount, onSuccess]);
-
-  // ✅ SHOW "NOT SUPPORTED" TEXT
-  if (!isApplePaySupported) {
-    return (
-      <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center">
-        <p className="text-gray-500 text-sm font-medium mb-1">Apple Pay</p>
-        <p className="text-xs text-gray-400">Not available in this browser</p>
-        <p className="text-xs text-gray-400 mt-1">
-          Use Safari on Mac, iPhone, or iPad
-        </p>
-      </div>
-    );
-  }
-
-  if (!paymentRequest) return (
-    <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center animate-pulse">
-      <div className="w-12 h-12 bg-gray-200 rounded-full mx-auto mb-2"></div>
-      <p className="text-sm text-gray-500">Loading Apple Pay...</p>
-    </div>
-  );
-
-  return <PaymentRequestButtonElement options={{ paymentRequest }} />;
-}
-
-
-
-
-
-// ---------- ✅ NEW CARD PAYMENT FORM - STAYS DISABLED UNTIL REDIRECT ----------
+// ---------- New card payment ----------
 function NewCardPaymentForm({
   clientSecret,
   amountLabel,
@@ -233,13 +356,12 @@ function NewCardPaymentForm({
     }
 
     if (paymentIntent && paymentIntent.status === "succeeded") {
-      // ✅ KEEP DISABLED - pass to parent, don't reset processing
       await onSuccess(paymentIntent.id);
+    } else {
+      setProcessing(false);
+      alert("Payment did not complete.");
     }
   };
-
- 
-
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 mt-4">
@@ -256,8 +378,7 @@ function NewCardPaymentForm({
           }}
         />
       </div>
-      
-      {/* ✅ FULL LOADING OVERLAY - STAYS DISABLED UNTIL REDIRECT */}
+
       <button
         type="submit"
         disabled={!stripe || !clientSecret || processing}
@@ -267,29 +388,44 @@ function NewCardPaymentForm({
             : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
         }`}
       >
-        <div className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
-          processing ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
-        }`}>
+        <div
+          className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+            processing ? "scale-100 opacity-100" : "scale-0 opacity-0"
+          }`}
+        >
           <div className="text-center text-white px-4">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-            <div className="text-sm font-medium">
-              Processing Payment...
-            </div>
+            <div className="text-sm font-medium">Processing Payment...</div>
             <div className="text-xs mt-1 opacity-90">Please wait</div>
           </div>
         </div>
-        
-        <span className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
-          processing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
-        }`}>
-          `Pay ${amountLabel}`
+
+        <span
+          className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+            processing
+              ? "opacity-0 scale-95 pointer-events-none"
+              : "opacity-100 scale-100"
+          }`}
+        >
+          Pay {amountLabel}
         </span>
       </button>
     </form>
   );
 }
 
-
+const TipsSelector = dynamic(
+  () => import("@/components/common/TipsSelector/TipsSelector"),
+  { ssr: false }
+);
+const Header = dynamic(
+  () => import("@/components/common/Header/Header"),
+  { ssr: false }
+);
+const QuantityButton = dynamic(
+  () => import("@/components/common/QuantityButton/QuantityButton"),
+  { ssr: false }
+);
 
 export default function RestaurantCart() {
   const router = useRouter();
@@ -305,22 +441,15 @@ export default function RestaurantCart() {
   const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
 
-  // Payment states
   const [payMode, setPayMode] = useState<PayMode>("new_card");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initializingPayment, setInitializingPayment] = useState(false);
-  const [remainingAmount, setRemainingAmount] = useState(0);     // ✅ MOVED HERE
-  const [walletAmountToUse, setWalletAmountToUse] = useState(0); // ✅ MOVED HERE
+  const [remainingAmount, setRemainingAmount] = useState(0);
 
-  // Tips states
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
 
-
-  
-
-  // ✅ Safe localStorage helper
   const getLocalStorage = (key: string): string => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(key) || "";
@@ -339,7 +468,8 @@ export default function RestaurantCart() {
 
   useEffect(() => {
     const storedDevice = getLocalStorage("device_id");
-    const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
+    const storedTable =
+      getLocalStorage("table_number") || getLocalStorage("table_no");
     const storedShop = getLocalStorage("selected_shop");
     const storedShopParsed = storedShop ? JSON.parse(storedShop) : {};
     const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
@@ -362,23 +492,29 @@ export default function RestaurantCart() {
     setShopName(storedShopName);
   }, []);
 
-  const filterOrdersByTable = useCallback((allOrders: Order[]) => {
-    const hasTableNumber = !!getLocalStorage("table_number");
-    const currentTableNo = getLocalStorage("table_number") || tableNo;
-    const currentShopId = getShopId();
-    const todayDate = getTodayDate();
+  const filterOrdersByTable = useCallback(
+    (allOrders: Order[]) => {
+      const hasTableNumber = !!getLocalStorage("table_number");
+      const currentTableNo =
+        getLocalStorage("table_number") || tableNo;
+      const currentShopId = getShopId();
+      const todayDate = getTodayDate();
 
-    return allOrders.filter((order) => {
-      if (order.order_date !== todayDate) return false;
-      if (currentShopId && order.shop_id !== currentShopId) return false;
+      return allOrders.filter((order) => {
+        if (order.order_date !== todayDate) return false;
+        if (currentShopId && order.shop_id !== currentShopId) return false;
 
-      if (hasTableNumber && currentTableNo) {
-        return order.table_no === currentTableNo && order.order_type === "2";
-      } else {
-        return order.order_type === "1";
-      }
-    });
-  }, [tableNo]);
+        if (hasTableNumber && currentTableNo) {
+          return (
+            order.table_no === currentTableNo && order.order_type === "2"
+          );
+        } else {
+          return order.order_type === "1";
+        }
+      });
+    },
+    [tableNo]
+  );
 
   const fetchOrders = useCallback(async () => {
     if (!deviceId) return;
@@ -391,10 +527,17 @@ export default function RestaurantCart() {
 
       if (data.status === "1") {
         const filteredOrders = (data.orders || [])
-          .filter((order: Order) => order.products && order.products.length > 0)
+          .filter(
+            (order: Order) =>
+              order.products && order.products.length > 0
+          )
           .sort((a: Order, b: Order) => {
-            const dateA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.order_time).getTime();
-            const dateB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.order_time).getTime();
+            const dateA = a.created_at
+              ? new Date(a.created_at).getTime()
+              : new Date(a.order_time).getTime();
+            const dateB = b.created_at
+              ? new Date(b.created_at).getTime()
+              : new Date(b.order_time).getTime();
             return dateB - dateA;
           });
         setOrders(filteredOrders);
@@ -494,15 +637,16 @@ export default function RestaurantCart() {
     }
   }, [deviceId, fetchCart, fetchOrders]);
 
-  // Updated totals with tips
-  const tipValue = tipIsAmount ? tipAmount : (cartTotal * tipPercent) / 100;
+  const tipValue = tipIsAmount
+    ? tipAmount
+    : (cartTotal * tipPercent) / 100;
   const taxes = cartTotal * 0.13;
   const totalAmount = cartTotal + taxes + tipValue;
   const finalTotalAmount = totalAmount.toFixed(2);
 
   useEffect(() => {
-  setRemainingAmount(totalAmount);
-}, [totalAmount, tipPercent, tipAmount, tipIsAmount, cartTotal]);
+    setRemainingAmount(totalAmount);
+  }, [totalAmount, tipPercent, tipAmount, tipIsAmount, cartTotal]);
 
   const getOrderType = (): string => {
     return getLocalStorage("table_number") ? "2" : "1";
@@ -511,8 +655,10 @@ export default function RestaurantCart() {
   const getUserInfo = () => {
     return {
       user_name: getLocalStorage("user_name") || "Guest",
-      user_email: getLocalStorage("user_email") || "user@liquiditybars.com",
-      user_mobile: getLocalStorage("user_mobile") || "+10000000000",
+      user_email:
+        getLocalStorage("user_email") || "user@liquiditybars.com",
+      user_mobile:
+        getLocalStorage("user_mobile") || "+10000000000",
     };
   };
 
@@ -554,8 +700,11 @@ export default function RestaurantCart() {
     }
   };
 
-  // ✅ FIXED: Button stays disabled until redirect
-  const createLiquidityOrder = async (transactionId: string, walletUsed: number = 0, paymentType: string = "1") => {
+  const createLiquidityOrder = async (
+    transactionId: string,
+    walletUsed: number = 0,
+    paymentType: string = "1"
+  ) => {
     const { user_name, user_email, user_mobile } = getUserInfo();
     const currentShopId = getShopId();
 
@@ -571,13 +720,13 @@ export default function RestaurantCart() {
     formData.append("email", user_email);
     formData.append("mobile", user_mobile);
     formData.append("device_id", deviceId);
-    formData.append("payment_type", "1");
+    formData.append("payment_type", paymentType);
     formData.append("transaction_id", transactionId);
     formData.append("order_time", new Date().toISOString());
     formData.append("table_no", tableNo);
     formData.append("order_date", getTodayDate());
     formData.append("shop_id", currentShopId);
-    formData.append("wallet_amount", "0.00");
+    formData.append("wallet_amount", walletUsed.toFixed(2));
     formData.append("online_amount", totalAmount.toFixed(2));
     formData.append("order_type", orderType);
     formData.append("tips", Number(tipValue).toFixed(2));
@@ -588,7 +737,7 @@ export default function RestaurantCart() {
         { method: "POST", body: formData }
       );
       const data = await res.json();
-      
+
       if (data.status === 1 || data.status === "1") {
         if (orderType === "1") {
           router.push(`/bar-order-success/${data.order_id}`);
@@ -604,43 +753,39 @@ export default function RestaurantCart() {
   };
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
-    // ✅ Button stays disabled - redirect happens in createLiquidityOrder
     await createLiquidityOrder(paymentIntentId);
   };
 
   const handleCheckout = async (e: FormEvent) => {
-  e.preventDefault();
-  
-  if (payMode === "apple_pay") return;  // Apple Pay handled by its own button
-  
-  if (payMode === "new_card" && !clientSecret) {
-    await initStripePayment();
-  }
-};
+    e.preventDefault();
 
-  {!clientSecret ? `Pay $${finalTotalAmount}` : "Confirm Payment"}
+    // Apple Pay uses its own button
+    if (payMode === "apple_pay") return;
+
+    if (payMode === "new_card" && !clientSecret) {
+      await initStripePayment();
+    }
+  };
 
   const hasTableNumber = !!getLocalStorage("table_number");
   const currentShopId = getShopId();
-  const restaurantLink = hasTableNumber 
+  const restaurantLink = hasTableNumber
     ? `/restaurant/${currentShopId}?table=${tableNo}`
     : `/restaurant/${currentShopId}`;
 
   const handleBack = () => {
     const shopId = getShopId();
-    const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
-    
-    if (shopId && tableNo) {
-      router.push(`/restaurant/${shopId}?table=${tableNo}`);
+    const tableNoLocal =
+      getLocalStorage("table_no") || getLocalStorage("table_number");
+
+    if (shopId && tableNoLocal) {
+      router.push(`/restaurant/${shopId}?table=${tableNoLocal}`);
     } else if (shopId) {
       router.push(`/restaurant/${shopId}`);
     } else {
       router.push("/restaurant");
     }
   };
-
-  const Header = dynamic(() => import("@/components/common/Header/Header"), { ssr: false });
-  const QuantityButton = dynamic(() => import("@/components/common/QuantityButton/QuantityButton"), { ssr: false });
 
   return (
     <>
@@ -664,32 +809,54 @@ export default function RestaurantCart() {
         <div className="pageContainer">
           {/* Cart Items */}
           {loading ? (
-            <p className="p-4 text-center text-gray-500">Loading cart...</p>
+            <p className="p-4 text-center text-gray-500">
+              Loading cart...
+            </p>
           ) : cartItems.length === 0 ? (
-            <p className="p-4 text-center text-gray-500">Cart is empty</p>
+            <p className="p-4 text-center text-gray-500">
+              Cart is empty
+            </p>
           ) : (
             <>
               {cartItems.map((item) => (
                 <div key={item.id} className={styles.itemCard}>
                   <div className={styles.itemleft}>
-                    <h4>{item.product_name} <span>(1oz)</span></h4>
+                    <h4>
+                      {item.product_name} <span>(1oz)</span>
+                    </h4>
                     {item.choice_of_mixer_name && (
-                      <p><strong>Choice of mixer:</strong> {item.choice_of_mixer_name}</p>
+                      <p>
+                        <strong>Choice of mixer:</strong>{" "}
+                        {item.choice_of_mixer_name}
+                      </p>
                     )}
                     {item.is_double_shot && (
-                      <p><strong>Additional shots:</strong> {item.shot_count}</p>
+                      <p>
+                        <strong>Additional shots:</strong>{" "}
+                        {item.shot_count}
+                      </p>
                     )}
                     {item.special_instruction && (
-                      <p><strong>Special Instruction:</strong> {item.special_instruction}</p>
+                      <p>
+                        <strong>Special Instruction:</strong>{" "}
+                        {item.special_instruction}
+                      </p>
                     )}
                   </div>
                   <div className={styles.itemRight}>
-                    <h4>${(Number(item.price) * Number(item.quantity)).toFixed(2)}</h4>
+                    <h4>
+                      $
+                      {(
+                        Number(item.price) * Number(item.quantity)
+                      ).toFixed(2)}
+                    </h4>
                     <QuantityButton
                       min={0}
                       max={10}
                       initialValue={Number(item.quantity)}
-                      onChange={(val) => updateQuantity(item.id, val)}
+                      onChange={(val) =>
+                        updateQuantity(item.id, val)
+                      }
                       onDelete={() => removeItem(item.id)}
                     />
                   </div>
@@ -709,21 +876,36 @@ export default function RestaurantCart() {
             options={clientSecret ? { clientSecret } : undefined}
           >
             <div className={styles.billingArea}>
-              <h4 className="text-lg font-semibold mb-4">Billing Summary</h4>
+              <h4 className="text-lg font-semibold mb-4">
+                Billing Summary
+              </h4>
 
               {loading ? (
-                <p className="p-2 text-center text-gray-500 text-sm">Loading...</p>
+                <p className="p-2 text-center text-gray-500 text-sm">
+                  Loading...
+                </p>
               ) : cartItems.length === 0 ? (
-                <p className="p-2 text-center text-gray-500 text-sm">No items</p>
+                <p className="p-2 text-center text-gray-500 text-sm">
+                  No items
+                </p>
               ) : (
-                <div className="">
+                <div>
                   {cartItems.map((item) => (
                     <div key={item.id} className={styles.billingItem}>
                       <div className={styles.itemleft}>
-                        <p>{item.product_name} <span className="text-xs">(1oz)</span></p>
+                        <p>
+                          {item.product_name}{" "}
+                          <span className="text-xs">(1oz)</span>
+                        </p>
                       </div>
                       <div className={styles.itemRight}>
-                        <p>${(Number(item.price) * Number(item.quantity)).toFixed(2)}</p>
+                        <p>
+                          $
+                          {(
+                            Number(item.price) *
+                            Number(item.quantity)
+                          ).toFixed(2)}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -750,7 +932,8 @@ export default function RestaurantCart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* <div className="mt-6 grid grid-cols-1 gap-3">
+              {/* Mode buttons */}
+              <div className="mt-6 grid grid-cols-1 gap-3">
                 <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
@@ -760,56 +943,37 @@ export default function RestaurantCart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
                   }`}
                 >
-                  Card ${finalTotalAmount}
+                  Pay ${finalTotalAmount} with Card
                 </button>
-              </div> */}
 
-              <div className="mt-6 grid grid-cols-1 gap-3">
-                {/* Card Button */}
                 <button
-                    type="button"
-                    onClick={() => setPayMode("new_card")}
-                    className={`py-3 px-4 rounded-lg font-medium border ${
-                    payMode === "new_card"
-                        ? "bg-primary text-white border-primary shadow-lg"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
-                    }`}
-                >
-                    Pay ${finalTotalAmount} with Card
-                </button>
-                
-                {/* Apple Pay Button */}
-                <button
-                    type="button"
-                    onClick={() => setPayMode("apple_pay")}
-                    className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
+                  type="button"
+                  onClick={() => setPayMode("apple_pay")}
+                  className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
                     payMode === "apple_pay"
-                        ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
-                    }`}
+                      ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
+                  }`}
                 >
-                    Pay ${finalTotalAmount} with Apple Pay
+                  Pay ${finalTotalAmount} with Apple Pay
                 </button>
-                </div>
+              </div>
 
+              {/* Card form */}
+              {payMode === "new_card" && clientSecret && (
+                <NewCardPaymentForm
+                  clientSecret={clientSecret}
+                  amountLabel={`$${finalTotalAmount}`}
+                  onSuccess={handlePaymentSuccess}
+                />
+              )}
 
-              {/* ✅ INSIDE Elements - Lines 640-655 */}
-{payMode === "new_card" && clientSecret && (
-  <NewCardPaymentForm
-    clientSecret={clientSecret}
-    amountLabel={`$${finalTotalAmount}`}
-    onSuccess={handlePaymentSuccess}
-  />
-)}
-
-
-<StripeApplePayWrapper
-  payMode={payMode}
-  remainingAmount={remainingAmount}    // ✅ Now > 0
-  walletAmountToUse={walletAmountToUse} // ✅ 0
-  createLiquidityOrder={createLiquidityOrder}
-/>
-
+              {/* Apple Pay button */}
+              <StripeApplePayWrapper
+                payMode={payMode}
+                remainingAmount={remainingAmount}
+                createLiquidityOrder={createLiquidityOrder}
+              />
             </div>
           </Elements>
 
@@ -822,46 +986,62 @@ export default function RestaurantCart() {
             }}
           />
 
-          {/* MAIN CHECKOUT BUTTON */}
+          {/* MAIN CHECKOUT BUTTON (card only) */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
               <button
                 type="submit"
-                disabled={cartItems.length === 0 || initializingPayment || loading}
-                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
+                disabled={
                   cartItems.length === 0 || initializingPayment || loading
+                }
+                className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all relative overflow-hidden group ${
+                  cartItems.length === 0 ||
+                  initializingPayment ||
+                  loading
                     ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50"
                     : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                 }`}
               >
-                <div className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
-                  initializingPayment ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
-                }`}>
+                <div
+                  className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+                    initializingPayment
+                      ? "scale-100 opacity-100"
+                      : "scale-0 opacity-0"
+                  }`}
+                >
                   {initializingPayment && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
                       <div className="text-sm font-medium">
-                        {clientSecret ? 'Starting Payment...' : 'Initializing Payment...'}
+                        {clientSecret
+                          ? "Starting Payment..."
+                          : "Initializing Payment..."}
                       </div>
-                      <div className="text-xs mt-1 opacity-90">Please wait</div>
+                      <div className="text-xs mt-1 opacity-90">
+                        Please wait
+                      </div>
                     </div>
                   )}
                 </div>
-                
-                <span className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
-                  initializingPayment ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
-                }`}>
+
+                <span
+                  className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+                    initializingPayment
+                      ? "opacity-0 scale-95 pointer-events-none"
+                      : "opacity-100 scale-100"
+                  }`}
+                >
                   {loading ? (
                     <>
                       <Loader2 className="w-6 h-6 animate-spin mr-2" />
                       Loading...
                     </>
                   ) : cartItems.length === 0 ? (
-                    'Empty Cart'
+                    "Empty Cart"
                   ) : !clientSecret ? (
                     `Pay $${finalTotalAmount}`
                   ) : (
-                    'Confirm Payment'
+                    "Confirm Payment"
                   )}
                 </span>
               </button>
