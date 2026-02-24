@@ -69,106 +69,27 @@ const TipsSelector = dynamic(
   () => import("@/components/common/TipsSelector/TipsSelector"),
   { ssr: false }
 );
-function StripeApplePayWrapper({
-    payMode,
-    remainingAmount,
-    walletAmountToUse,
-    createLiquidityOrder,
-  }: any) {
-    const stripe = useStripe();
+// ✅ HELPER FUNCTION
+const isAppleDevice = () => {
+  return /Mac|iPod|iPhone|iPad/.test(navigator.platform) ||
+         (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome'));
+};
 
-    // ✅ Allow both normal & split Apple Pay
-    if (payMode !== "apple_pay") return null;
-    if (!stripe) return null;
-    if (remainingAmount <= 0) return null;
-
-    return (
-      <div className="mt-4">
-        <StripeApplePayButton
-          stripe={stripe}
-          amount={remainingAmount}
-          onSuccess={(paymentIntentId) =>
-            createLiquidityOrder(
-              paymentIntentId,
-              walletAmountToUse,
-              "1"
-            )
-          }
-        />
-      </div>
-    );
-}
-
-function StripeApplePayButton({
-  stripe,
-  amount,
-  onSuccess,
-}: {
-  stripe: any;
-  amount: number;
-  onSuccess: (id: string) => Promise<void>;
-}) {
-  const [paymentRequest, setPaymentRequest] = useState<any>(null);
-
-  useEffect(() => {
-    if (!stripe || amount <= 0) return;
-
-    const pr = stripe.paymentRequest({
-      country: "CA",
-      currency: "cad",
-      total: {
-        label: "Liquidity Bars Order",
-        amount: Math.round(amount * 100),
-      },
-      requestPayerName: true,
-      requestPayerEmail: true,
-    });
-
-    pr.canMakePayment().then((result: any) => {
-      if (result) setPaymentRequest(pr);
-    });
-
-    pr.on("paymentmethod", async (ev: any) => {
-      try {
-        const res = await fetch("/api/create-payment-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: Math.round(amount * 100),
-            currency: "cad",
-          }),
-        });
-
-        const data = await res.json();
-
-        const { paymentIntent, error } = await stripe.confirmCardPayment(
-          data.client_secret,
-          { payment_method: ev.paymentMethod.id },
-          { handleActions: false }
-        );
-
-        if (error) {
-          ev.complete("fail");
-          return;
-        }
-
-        ev.complete("success");
-
-        if (paymentIntent.status === "requires_action") {
-          await stripe.confirmCardPayment(data.client_secret);
-        }
-
-        await onSuccess(paymentIntent.id);
-      } catch (err) {
-        console.error("Stripe Apple Pay error:", err);
-        ev.complete("fail");
-      }
-    });
-  }, [stripe, amount, onSuccess]);
-
+// ✅ FIXED StripeApplePayWrapper - STABLE VERSION
+function StripeApplePayWrapper({ 
+  payMode, 
+  remainingAmount, 
+  paymentRequest, 
+  createLiquidityOrder 
+}: any) {
+  if (payMode !== "apple_pay") return null;
   if (!paymentRequest) return null;
 
-  return <PaymentRequestButtonElement options={{ paymentRequest }} />;
+  return (
+    <div className="mt-4">
+      <PaymentRequestButtonElement options={{ paymentRequest }} />
+    </div>
+  );
 }
 
 
@@ -999,32 +920,36 @@ export default function RestaurantCart() {
               </div> */}
 
               <div className="mt-6 grid grid-cols-1 gap-3">
-                {/* Card Button */}
-                <button
-                    type="button"
-                    onClick={() => setPayMode("new_card")}
-                    className={`py-3 px-4 rounded-lg font-medium border ${
-                    payMode === "new_card"
-                        ? "bg-primary text-white border-primary shadow-lg"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
-                    }`}
-                >
-                    Pay ${finalTotalAmount} with Card
-                </button>
-                
-                {/* Apple Pay Button */}
-                <button
-                    type="button"
-                    onClick={() => setPayMode("apple_pay")}
-                    className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
-                    payMode === "apple_pay"
-                        ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
-                    }`}
-                >
-                    Pay ${finalTotalAmount} with Apple Pay
-                </button>
-                </div>
+  {/* Card Button */}
+  <button
+    type="button"
+    onClick={() => setPayMode("new_card")}
+    className={`py-3 px-4 rounded-lg font-medium border ${
+      payMode === "new_card"
+        ? "bg-primary text-white border-primary shadow-lg"
+        : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
+    }`}
+  >
+    💳 Pay ${finalTotalAmount} with Card
+  </button>
+  
+  {/* Apple Pay/Google Pay Trigger */}
+  <button
+    type="button"
+    onClick={() => setPayMode("apple_pay")}
+    className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
+      payMode === "apple_pay"
+        ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
+        : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
+    }`}
+  >
+    {isAppleDevice() 
+      ? `🍎 Pay ${finalTotalAmount} with Apple Pay` 
+      : `💳 Pay ${finalTotalAmount} Now`
+    }
+  </button>
+</div>
+
 
 
               {/* ✅ INSIDE Elements - Lines 640-655 */}
@@ -1037,12 +962,14 @@ export default function RestaurantCart() {
 )}
 
 
-<StripeApplePayWrapper
-  payMode={payMode}
-  remainingAmount={remainingAmount}    // ✅ Now > 0
-  walletAmountToUse={walletAmountToUse} // ✅ 0
-  createLiquidityOrder={createLiquidityOrder}
-/>
+{payMode === "apple_pay" && (
+  <StripeApplePayWrapper
+    payMode={payMode}
+    remainingAmount={remainingAmount}
+    createLiquidityOrder={createLiquidityOrder}
+  />
+)}
+
 
             </div>
           </Elements>
