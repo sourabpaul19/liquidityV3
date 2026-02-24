@@ -1055,7 +1055,7 @@ export default function RestaurantBarCart() {
                       : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
                   }`}
                 >
-                  Pay ${finalTotalAmount} with Apple Pay / GPay
+                 Pay ${finalTotalAmount} with Apple Pay
                 </button>
               </div>
 
