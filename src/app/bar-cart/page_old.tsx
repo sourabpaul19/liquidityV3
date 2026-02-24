@@ -5,15 +5,12 @@ import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
-// ADD PaymentRequestButtonElement
 import {
   Elements,
   CardElement,
-  PaymentRequestButtonElement,  // ← NEW
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-
 import dynamic from "next/dynamic";
 import styles from "./bar-cart.module.scss";
 
@@ -61,73 +58,12 @@ interface Order {
   products: OrderProduct[];
 }
 
-//type PayMode = "new_card" | "saved_card";
-type PayMode = "new_card" | "apple_pay";  // ← SIMPLIFIED (removed wallet/split)
-
+type PayMode = "new_card" | "saved_card";
 
 const TipsSelector = dynamic(
   () => import("@/components/common/TipsSelector/TipsSelector"),
   { ssr: false }
 );
-
- // ✅ NEW COMPONENT (from your paste.txt reference)
-// ✅ FIXED - NO stripe prop needed
-function ApplePayButton({
-  amount,
-  onSuccess,
-}: {
-  amount: number;
-  onSuccess: (paymentIntentId: string) => Promise<void>;
-}) {
-  const stripe = useStripe();  // ✅ Gets from Elements context
-  const [paymentRequest, setPaymentRequest] = useState<any>(null);
-
-  useEffect(() => {
-    if (!stripe || amount === 0) return;
-
-    const pr = stripe.paymentRequest({
-      country: "CA",
-      currency: "cad",
-      total: { label: "Liquidity Bars Order", amount: Math.round(amount * 100) },
-      requestPayerName: true,
-      requestPayerEmail: true,
-    });
-
-    pr.canMakePayment().then((result: any) => result && setPaymentRequest(pr));
-
-    pr.on("paymentmethod", async (ev: any) => {
-      try {
-        const res = await fetch("/api/create-payment-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            amount: Math.round(amount * 100), 
-            currency: "cad",
-            device_id: localStorage.getItem("device_id")
-          }),
-        });
-        const data = await res.json();
-
-        const { error, paymentIntent } = await stripe.confirmCardPayment(data.client_secret, {
-          payment_method: ev.paymentMethod.id,
-          //handleActions: false,
-        });
-
-        if (error) return ev.complete("fail");
-        ev.complete("success");
-        if (paymentIntent.status === "succeeded") await onSuccess(paymentIntent.id);
-      } catch (err) {
-        console.error("Apple Pay error:", err);
-        ev.complete("fail");
-      }
-    });
-  }, [stripe, amount, onSuccess]);
-
-  if (!paymentRequest || !stripe) return null;
-  return <PaymentRequestButtonElement options={{ paymentRequest }} />;
-}
-
-
 
 // ---------- ✅ NEW CARD PAYMENT FORM - STAYS DISABLED UNTIL REDIRECT ----------
 function NewCardPaymentForm({
@@ -180,9 +116,6 @@ function NewCardPaymentForm({
     }
   };
 
- 
-
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4 mt-4">
       <div className="p-3 bg-gray-50 border rounded-lg">
@@ -230,8 +163,6 @@ function NewCardPaymentForm({
     </form>
   );
 }
-
-
 
 export default function RestaurantCart() {
   const router = useRouter();
@@ -542,16 +473,14 @@ export default function RestaurantCart() {
   };
 
   const handleCheckout = async (e: FormEvent) => {
-  e.preventDefault();
-  
-  if (payMode === "apple_pay") return;  // Apple Pay handled by its own button
-  
-  if (payMode === "new_card" && !clientSecret) {
-    await initStripePayment();
-  }
-};
-
-  {!clientSecret ? `Pay $${finalTotalAmount}` : "Confirm Payment"}
+    e.preventDefault();
+    
+    if (payMode === "new_card" && !clientSecret) {
+      await initStripePayment();
+    } else {
+      alert("Saved card payment coming soon!");
+    }
+  };
 
   const hasTableNumber = !!getLocalStorage("table_number");
   const currentShopId = getShopId();
@@ -683,7 +612,7 @@ export default function RestaurantCart() {
                 <h4>${finalTotalAmount}</h4>
               </div>
 
-              {/* <div className="mt-6 grid grid-cols-1 gap-3">
+              <div className="mt-6 grid grid-cols-1 gap-3">
                 <button
                   type="button"
                   onClick={() => setPayMode("new_card")}
@@ -695,52 +624,15 @@ export default function RestaurantCart() {
                 >
                   Card ${finalTotalAmount}
                 </button>
-              </div> */}
+              </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-3">
-                {/* Card Button */}
-                <button
-                    type="button"
-                    onClick={() => setPayMode("new_card")}
-                    className={`py-3 px-4 rounded-lg font-medium border ${
-                    payMode === "new_card"
-                        ? "bg-primary text-white border-primary shadow-lg"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-primary hover:bg-primary/5"
-                    }`}
-                >
-                    Pay ${finalTotalAmount} with Card
-                </button>
-                
-                {/* Apple Pay Button */}
-                <button
-                    type="button"
-                    onClick={() => setPayMode("apple_pay")}
-                    className={`py-3 px-4 rounded-lg font-medium border flex items-center justify-center ${
-                    payMode === "apple_pay"
-                        ? "bg-black text-white border-black shadow-lg hover:bg-gray-900"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-black hover:bg-gray-50"
-                    }`}
-                >
-                    Pay ${finalTotalAmount} with Apple Pay
-                </button>
-                </div>
-
-
-              {/* ✅ INSIDE Elements - Lines 640-655 */}
-{payMode === "new_card" && clientSecret && (
-  <NewCardPaymentForm
-    clientSecret={clientSecret}
-    amountLabel={`$${finalTotalAmount}`}
-    onSuccess={handlePaymentSuccess}
-  />
-)}
-{payMode === "apple_pay" && (
-  <ApplePayButton
-    amount={totalAmount}
-    onSuccess={handlePaymentSuccess}
-  />
-)}
-
+              {payMode === "new_card" && clientSecret && (
+                <NewCardPaymentForm
+                  clientSecret={clientSecret}
+                  amountLabel={`$${finalTotalAmount}`}
+                  onSuccess={handlePaymentSuccess}
+                />
+              )}
             </div>
           </Elements>
 
