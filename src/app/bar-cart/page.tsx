@@ -106,8 +106,9 @@ function ApplePayButton({
   amount: number;
   onSuccess: (id: string) => Promise<void>;
 }) {
-  const stripe = useStripe();  // ✅ Hook at top level
+  const stripe = useStripe();
   const [paymentRequest, setPaymentRequest] = useState<any>(null);
+  const [isApplePaySupported, setIsApplePaySupported] = useState(false); // ✅ NEW
 
   useEffect(() => {
     if (!stripe || amount <= 0) return;
@@ -120,7 +121,10 @@ function ApplePayButton({
       requestPayerEmail: true,
     });
 
+    // ✅ CHECK SUPPORT + SHOW STATUS
     pr.canMakePayment().then((result: any) => {
+      console.log("Apple Pay supported:", result); // Debug
+      setIsApplePaySupported(!!result);
       if (result) setPaymentRequest(pr);
     });
 
@@ -156,9 +160,29 @@ function ApplePayButton({
     });
   }, [stripe, amount, onSuccess]);
 
-  if (!paymentRequest) return null;
+  // ✅ SHOW "NOT SUPPORTED" TEXT
+  if (!isApplePaySupported) {
+    return (
+      <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center">
+        <p className="text-gray-500 text-sm font-medium mb-1">Apple Pay</p>
+        <p className="text-xs text-gray-400">Not available in this browser</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Use Safari on Mac, iPhone, or iPad
+        </p>
+      </div>
+    );
+  }
+
+  if (!paymentRequest) return (
+    <div className="mt-4 p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl text-center animate-pulse">
+      <div className="w-12 h-12 bg-gray-200 rounded-full mx-auto mb-2"></div>
+      <p className="text-sm text-gray-500">Loading Apple Pay...</p>
+    </div>
+  );
+
   return <PaymentRequestButtonElement options={{ paymentRequest }} />;
 }
+
 
 
 
