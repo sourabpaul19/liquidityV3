@@ -69,21 +69,48 @@ const TipsSelector = dynamic(
   () => import("@/components/common/TipsSelector/TipsSelector"),
   { ssr: false }
 );
+function StripeApplePayWrapper({
+  payMode,
+  remainingAmount,
+  walletAmountToUse,
+  createLiquidityOrder,
+}: {
+  payMode: PayMode;
+  remainingAmount: number;
+  walletAmountToUse: number;
+  createLiquidityOrder: (id: string, walletUsed: number, paymentType: string) => Promise<void>;
+}) {
+  const stripe = useStripe();
 
- // ✅ NEW COMPONENT (from your paste.txt reference)
-// ✅ FIXED - NO stripe prop needed
+  // ✅ FIXED: Only check apple_pay (NO split_apple)
+  if (payMode !== "apple_pay") return null;
+  if (!stripe) return null;
+  if (remainingAmount <= 0) return null;
+
+  return (
+    <div className="mt-4">
+      <ApplePayButton
+        amount={remainingAmount}
+        onSuccess={(paymentIntentId) =>
+          createLiquidityOrder(paymentIntentId, walletAmountToUse, "1")
+        }
+      />
+    </div>
+  );
+}
+
 function ApplePayButton({
   amount,
   onSuccess,
 }: {
   amount: number;
-  onSuccess: (paymentIntentId: string) => Promise<void>;
+  onSuccess: (id: string) => Promise<void>;
 }) {
-  const stripe = useStripe();  // ✅ Gets from Elements context
+  const stripe = useStripe();  // ✅ Hook at top level
   const [paymentRequest, setPaymentRequest] = useState<any>(null);
 
   useEffect(() => {
-    if (!stripe || amount === 0) return;
+    if (!stripe || amount <= 0) return;
 
     const pr = stripe.paymentRequest({
       country: "CA",
@@ -93,29 +120,35 @@ function ApplePayButton({
       requestPayerEmail: true,
     });
 
-    pr.canMakePayment().then((result: any) => result && setPaymentRequest(pr));
+    pr.canMakePayment().then((result: any) => {
+      if (result) setPaymentRequest(pr);
+    });
 
     pr.on("paymentmethod", async (ev: any) => {
       try {
         const res = await fetch("/api/create-payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            amount: Math.round(amount * 100), 
+          body: JSON.stringify({
+            amount: Math.round(amount * 100),
             currency: "cad",
-            device_id: localStorage.getItem("device_id")
+            device_id: localStorage.getItem("device_id"),
           }),
         });
         const data = await res.json();
 
-        const { error, paymentIntent } = await stripe.confirmCardPayment(data.client_secret, {
-          payment_method: ev.paymentMethod.id,
-          //handleActions: false,
-        });
+        const { paymentIntent, error } = await stripe.confirmCardPayment(
+          data.client_secret,
+          { payment_method: ev.paymentMethod.id }
+        );
 
-        if (error) return ev.complete("fail");
+        if (error) {
+          ev.complete("fail");
+          return;
+        }
+
         ev.complete("success");
-        if (paymentIntent.status === "succeeded") await onSuccess(paymentIntent.id);
+        await onSuccess(paymentIntent.id);
       } catch (err) {
         console.error("Apple Pay error:", err);
         ev.complete("fail");
@@ -123,9 +156,10 @@ function ApplePayButton({
     });
   }, [stripe, amount, onSuccess]);
 
-  if (!paymentRequest || !stripe) return null;
+  if (!paymentRequest) return null;
   return <PaymentRequestButtonElement options={{ paymentRequest }} />;
 }
+
 
 
 
@@ -256,6 +290,8 @@ export default function RestaurantCart() {
   const [tipPercent, setTipPercent] = useState<number>(20);
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
+
+  
 
   // ✅ Safe localStorage helper
   const getLocalStorage = (key: string): string => {
@@ -436,6 +472,10 @@ export default function RestaurantCart() {
   const taxes = cartTotal * 0.13;
   const totalAmount = cartTotal + taxes + tipValue;
   const finalTotalAmount = totalAmount.toFixed(2);
+
+
+  const [remainingAmount, setRemainingAmount] = useState(totalAmount);
+    const [walletAmountToUse, setWalletAmountToUse] = useState(0);
 
   const getOrderType = (): string => {
     return getLocalStorage("table_number") ? "2" : "1";
@@ -734,13 +774,13 @@ export default function RestaurantCart() {
     onSuccess={handlePaymentSuccess}
   />
 )}
-{payMode === "apple_pay" && (
-  <ApplePayButton
-    amount={totalAmount}
-    onSuccess={handlePaymentSuccess}
-  />
-)}
 
+<StripeApplePayWrapper
+  payMode={payMode}
+  remainingAmount={remainingAmount}
+  walletAmountToUse={0}
+  createLiquidityOrder={createLiquidityOrder}
+/>
             </div>
           </Elements>
 
