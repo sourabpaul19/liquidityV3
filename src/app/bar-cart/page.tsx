@@ -70,38 +70,33 @@ const TipsSelector = dynamic(
   { ssr: false }
 );
 function StripeApplePayWrapper({
-  payMode,
-  remainingAmount,
-  walletAmountToUse,
-  createLiquidityOrder,
-}: {
-  payMode: PayMode;
-  remainingAmount: number;
-  walletAmountToUse: number;
-  createLiquidityOrder: (id: string, walletUsed: number, paymentType: string) => Promise<void>;
-}) {
-  const stripe = useStripe();
+    payMode,
+    remainingAmount,
+    walletAmountToUse,
+    createLiquidityOrder,
+  }: any) {
+    const stripe = useStripe();
 
-  // ✅ FIXED: Only check apple_pay (NO split_apple)
-  if (payMode !== "apple_pay") return null;
-  if (!stripe) return null;
-  if (remainingAmount <= 0) return null;
+    // ✅ Allow both normal & split Apple Pay
+    if (payMode !== "apple_pay") return null;
+    if (!stripe) return null;
+    if (remainingAmount <= 0) return null;
 
-  return (
-    <div className="mt-4">
-      <StripeApplePayButton
-        stripe={stripe}
-        amount={remainingAmount}
-        onSuccess={(paymentIntentId) =>
-          createLiquidityOrder(
-            paymentIntentId,
-            walletAmountToUse,
-            "1"
-          )
-        }
-      />
-    </div>
-  );
+    return (
+      <div className="mt-4">
+        <StripeApplePayButton
+          stripe={stripe}
+          amount={remainingAmount}
+          onSuccess={(paymentIntentId) =>
+            createLiquidityOrder(
+              paymentIntentId,
+              walletAmountToUse,
+              "1"
+            )
+          }
+        />
+      </div>
+    );
 }
 
 function StripeApplePayButton({
@@ -543,6 +538,9 @@ export default function RestaurantCart() {
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
 
+  // NEW: Apple Pay stabilization
+  const [applePayReady, setApplePayReady] = useState(false);
+
 
   
 
@@ -562,6 +560,16 @@ export default function RestaurantCart() {
   const getTodayDate = (): string => {
     return new Date().toISOString().split("T")[0];
   };
+
+  // Apple Pay ready state management
+  useEffect(() => {
+    if (payMode === "apple_pay") {
+      const timer = setTimeout(() => setApplePayReady(true), 100);
+      return () => clearTimeout(timer);
+    } else {
+      setApplePayReady(false);
+    }
+  }, [payMode]);
 
   useEffect(() => {
     const storedDevice = getLocalStorage("device_id");
@@ -837,7 +845,7 @@ export default function RestaurantCart() {
   const handleCheckout = async (e: FormEvent) => {
   e.preventDefault();
   
-  if (payMode === "apple_pay") return;  // Apple Pay handled by its own button
+  //if (payMode === "apple_pay") return;  // Apple Pay handled by its own button
   
   if (payMode === "new_card" && !clientSecret) {
     await initStripePayment();
