@@ -11,6 +11,7 @@ const publicRoutes = [
   '/outlet',
   '/restaurant',
   '/restaurant-cart',
+  '/restaurant-closed',
   '/table',
   '/guest',
   '/my-table',

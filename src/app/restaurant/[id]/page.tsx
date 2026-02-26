@@ -67,6 +67,7 @@ interface Category {
 interface StoreData {
   name: string;
   image: string | null;
+  is_open?: number; // add
 }
 
 export default function Restaurant() {
@@ -97,10 +98,14 @@ export default function Restaurant() {
   const [cartCount, setCartCount] = useState(0);
   const [cartLoaded, setCartLoaded] = useState(false);
 
+
+ const [shopIsOpen, setShopIsOpen] = useState<number | null>(null);
+  const [checkingShopStatus, setCheckingShopStatus] = useState(true);
   // Store state
   const [storeData, setStoreData] = useState<StoreData>({
     name: "Vertige Investment Group Annual Summit",
     image: null,
+    is_open: 1,
   });
 
   // Modal state
@@ -348,47 +353,100 @@ export default function Restaurant() {
   }, [deviceId, fetchCart]);
 
   // ---------- STORE DATA ----------
+  // useEffect(() => {
+  //   const fetchStoreData = async () => {
+  //     try {
+  //       const res = await fetch(
+  //         "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+  //       );
+  //       const data = await res.json();
+
+  //       if (data.status === "1" && Array.isArray(data.shops)) {
+  //         const shop = data.shops.find(
+  //           (s: { id: string }) => String(s.id) === String(shopId)
+  //         );
+  //         if (shop) {
+  //           const selectedShop = {
+  //             id: shop.id,
+  //             name: shop.name || "Vertige Investment Group Annual Summit",
+  //             image: shop.image || null,
+  //           };
+  //           localStorage.setItem("selected_shop", JSON.stringify(selectedShop));
+  //           setStoreData({
+  //             name: selectedShop.name,
+  //             image: selectedShop.image,
+  //           });
+  //           return;
+  //         }
+  //       }
+
+  //       const fallback = {
+  //         id: shopId,
+  //         name: "Vertige Investment Group Annual Summit",
+  //         image: null,
+  //       };
+  //       localStorage.setItem("selected_shop", JSON.stringify(fallback));
+  //       setStoreData({ name: fallback.name, image: fallback.image });
+  //     } catch (e) {
+  //       console.error("fetchStoreData error", e);
+  //     }
+  //   };
+
+  //   fetchStoreData();
+  // }, [shopId]);
+
   useEffect(() => {
-    const fetchStoreData = async () => {
-      try {
-        const res = await fetch(
-          "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+  const fetchStoreData = async () => {
+    try {
+      const res = await fetch(
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+      );
+      const data = await res.json();
+
+      if (data.status === "1" && Array.isArray(data.shops)) {
+        const shop = data.shops.find(
+          (s: { id: string }) => String(s.id) === String(shopId)
         );
-        const data = await res.json();
 
-        if (data.status === "1" && Array.isArray(data.shops)) {
-          const shop = data.shops.find(
-            (s: { id: string }) => String(s.id) === String(shopId)
-          );
-          if (shop) {
-            const selectedShop = {
-              id: shop.id,
-              name: shop.name || "Vertige Investment Group Annual Summit",
-              image: shop.image || null,
-            };
-            localStorage.setItem("selected_shop", JSON.stringify(selectedShop));
-            setStoreData({
-              name: selectedShop.name,
-              image: selectedShop.image,
-            });
-            return;
+        if (shop) {
+          // IMPORTANT: if closed, go to restaurant-closed page
+          const isOpen = Number(shop.is_open ?? 1);
+          if (isOpen === 0) {
+            // replace is better for guard-style redirects
+            // router.replace(`/restaurant-closed?shop=${shopId}`);
+            // return;
+            router.replace(`/restaurant-closed/${shopId}${initialTable ? `?table=${initialTable}` : ''}`);
+  return;
           }
+
+          const selectedShop = {
+            id: shop.id,
+            name: shop.name || "Vertige Investment Group Annual Summit",
+            image: shop.image || null,
+            is_open: isOpen,
+          };
+
+          localStorage.setItem("selected_shop", JSON.stringify(selectedShop));
+          setStoreData({
+            name: selectedShop.name,
+            image: selectedShop.image,
+            is_open: selectedShop.is_open,
+          });
+          return;
         }
-
-        const fallback = {
-          id: shopId,
-          name: "Vertige Investment Group Annual Summit",
-          image: null,
-        };
-        localStorage.setItem("selected_shop", JSON.stringify(fallback));
-        setStoreData({ name: fallback.name, image: fallback.image });
-      } catch (e) {
-        console.error("fetchStoreData error", e);
       }
-    };
 
-    fetchStoreData();
-  }, [shopId]);
+      // fallback (treat as open or decide your default)
+      const fallback = { id: shopId, name: "Vertige Investment Group Annual Summit", image: null, is_open: 1 };
+      localStorage.setItem("selected_shop", JSON.stringify(fallback));
+      setStoreData({ name: fallback.name, image: fallback.image, is_open: fallback.is_open });
+    } catch (e) {
+      console.error("fetchStoreData error", e);
+    }
+  };
+
+  fetchStoreData();
+}, [shopId, router]);
 
   // ---------- CATEGORIES / MIXERS ----------
   useEffect(() => {
@@ -460,6 +518,15 @@ export default function Restaurant() {
   const checkShopBeforeAdd = async (item: MenuItem | null, qty: number) => {
     if (!item || isAddingToCart) return; // UPDATED: Check loading state
 
+    // 🚨 NEW: CHECK SHOP STATUS FIRST
+  const isShopOpen = await checkShopStatusBeforeAdd();
+  if (!isShopOpen) {
+    // 🆕 REDIRECT TO CLOSED PAGE
+    const redirectUrl = `/restaurant-closed/${shopId}${tableNumber ? `?table=${tableNumber}` : ''}`;
+    router.replace(redirectUrl);
+    return;
+  }
+
     const cartShop =
       typeof window !== "undefined" ? localStorage.getItem("cart_shop_id") : null;
 
@@ -476,6 +543,28 @@ export default function Restaurant() {
     await clearCart();
     await addToCart(item, qty);
   };
+
+  const checkShopStatusBeforeAdd = async (): Promise<boolean> => {
+  try {
+    const res = await fetch(
+      "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+    );
+    const data = await res.json();
+
+    if (data.status === "1" && Array.isArray(data.shops)) {
+      const shop = data.shops.find((s: any) => String(s.id) === shopId);
+      if (shop) {
+        const isOpen = Number(shop.is_open ?? 0);
+        setShopIsOpen(isOpen);
+        return isOpen === 1;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error("Shop status check failed:", error);
+    return false;
+  }
+};
 
   // ---------- ADD TO CART (UPDATED WITH LOADING STATE) ----------
   const addToCart = async (item: MenuItem, qty: number) => {

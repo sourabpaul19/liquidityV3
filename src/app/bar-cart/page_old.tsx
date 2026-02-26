@@ -188,6 +188,9 @@ export default function RestaurantCart() {
   const [tipIsAmount, setTipIsAmount] = useState<boolean>(false);
   const [tipAmount, setTipAmount] = useState<number>(0);
 
+  const [shopIsOpen, setShopIsOpen] = useState<number | null>(null);
+  const [checkingShopStatus, setCheckingShopStatus] = useState(true);
+
   // ✅ Safe localStorage helper
   const getLocalStorage = (key: string): string => {
     if (typeof window === "undefined") return "";
@@ -229,6 +232,64 @@ export default function RestaurantCart() {
     setShopId(storedShopId);
     setShopName(storedShopName);
   }, []);
+
+
+  const checkShopStatus = useCallback(async () => {
+    if (!shopId) return;
+    
+    try {
+      setCheckingShopStatus(true);
+      const res = await fetch(
+        "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+      );
+      const data = await res.json();
+
+      if (data.status === "1" && Array.isArray(data.shops)) {
+        const shop = data.shops.find((s: any) => String(s.id) === shopId);
+        if (shop) {
+          const isOpen = Number(shop.is_open ?? 0);
+          setShopIsOpen(isOpen);
+          setShopName(shop.name || "Restaurant");
+
+          // 👇 AUTO-REDIRECT if shop CLOSED
+          if (isOpen === 0) {
+            console.log("🛑 Shop closed! Redirecting to closed page...");
+            const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
+            router.replace(redirectUrl);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Shop status check error:", e);
+    } finally {
+      setCheckingShopStatus(false);
+    }
+  }, [shopId, tableNo, router]);
+
+  // 👇 NEW: Check shop status on load (before anything else)
+  useEffect(() => {
+    if (shopId) {
+      checkShopStatus();
+    }
+  }, [shopId, checkShopStatus]);
+
+  // 👇 Show loader until shop status confirmed
+  if (checkingShopStatus || shopIsOpen === null) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Checking restaurant status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 👇 Early return if shop closed (safety net)
+  if (shopIsOpen === 0) {
+    return null; // Won't reach here due to redirect, but safety
+  }
 
   const filterOrdersByTable = useCallback((allOrders: Order[]) => {
     const hasTableNumber = !!getLocalStorage("table_number");
