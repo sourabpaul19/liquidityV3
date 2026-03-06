@@ -13,7 +13,7 @@ import {
   useSearchParams,
 } from "next/navigation";
 import Image from "next/image";
-import { LogOut, Plus, Trash2, AlertTriangle, X } from "lucide-react";
+import { LogOut, Plus, Trash2, AlertTriangle, X, Receipt } from "lucide-react";
 import toast from "react-hot-toast";
 
 import styles from "../outlet.module.scss";
@@ -70,13 +70,46 @@ interface StoreData {
   is_open?: number; // add
 }
 
+interface OrderProduct {
+  id: string;
+  product_name: string;
+  quantity: string;
+  price: string;
+  choice_of_mixer_name?: string;
+  is_double_shot: string;
+  shot_count: string;
+  special_instruction?: string;
+  unit: string;
+}
+
+interface Order {
+  id: string;
+  unique_id: string;
+  amount: string;
+  tax_amount: string;
+  total_amount: string;
+  tips: string;
+  order_date: string;
+  order_time: string;
+  created_at?: string;
+  table_no: string;
+  status: string;
+  order_type?: string;
+  shop_id?: string;
+  products: OrderProduct[];
+}
+
 export default function Restaurant() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams();
   const searchParams = useSearchParams();
+  // const [shopId, setShopId] = useState<string>("");
+  // const shopId = params?.id ? String(params.id) : "25";
 
-  const shopId = params?.id ? String(params.id) : "25";
+  const [shopId, setShopId] = useState<string>(() => {
+  return params?.id ? String(params.id) : "25";
+});
   const initialTable =
     typeof window !== "undefined" ? searchParams.get("table") : null;
 
@@ -97,6 +130,12 @@ export default function Restaurant() {
   const [cartTotal, setCartTotal] = useState(0);
   const [cartCount, setCartCount] = useState(0);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+      const [tableNo, setTableNo] = useState<string>("");
+      const [shopName, setShopName] = useState<string>("");
+      const [loading, setLoading] = useState<boolean>(true);
+      const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
+      const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
 
 
  const [shopIsOpen, setShopIsOpen] = useState<number | null>(null);
@@ -125,6 +164,12 @@ export default function Restaurant() {
   // Refs
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // ✅ Safe localStorage helper
+  const getLocalStorage = (key: string): string => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(key) || "";
+  };
 
   // ---------- CART NORMALIZER ----------
   const normalizeCartItem = useCallback((row: any): CartItem => {
@@ -239,7 +284,7 @@ export default function Restaurant() {
       setCartLoaded(true);
     }
   }, [deviceId, userId, normalizeCartItem]);
-
+  
   // ---------- CHECK LOGIN STATUS ----------
   useEffect(() => {
     setIsClient(true);
@@ -658,6 +703,103 @@ export default function Restaurant() {
       setActiveCategory(id);
     }
   };
+  const getShopId = (): string => {
+    const selected_shop = getLocalStorage("selected_shop");
+    return selected_shop
+      ? JSON.parse(selected_shop)?.id || getLocalStorage("shop_id")
+      : getLocalStorage("shop_id");
+  };
+
+  // ✅ Get today's date
+  const getTodayDate = (): string => {
+    return new Date().toISOString().split("T")[0];
+  };
+
+  // ✅ Load from localStorage
+  useEffect(() => {
+    const storedDevice = getLocalStorage("device_id");
+    const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
+    const storedShop = getLocalStorage("selected_shop");
+    const storedShopParsed = storedShop ? JSON.parse(storedShop) : {};
+    const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
+    const storedShopName = storedShopParsed?.name || "";
+
+    if (!getLocalStorage("user_email")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_email", "user@liquiditybars.com");
+      }
+    }
+    if (!getLocalStorage("user_mobile")) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user_mobile", "+10000000000");
+      }
+    }
+
+    setDeviceId(storedDevice);
+    setTableNo(storedTable);
+    setShopId(storedShopId);
+    setShopName(storedShopName);
+  }, []);
+
+  const filterOrdersByTable = useCallback((allOrders: Order[]) => {
+      const hasTableNumber = !!getLocalStorage("table_number");
+      const currentTableNo = getLocalStorage("table_number") || tableNo;
+      const currentShopId = getShopId();
+      const todayDate = getTodayDate();
+  
+      return allOrders.filter((order) => {
+        if (order.order_date !== todayDate) return false;
+        if (currentShopId && order.shop_id !== currentShopId) return false;
+  
+        if (hasTableNumber && currentTableNo) {
+          return order.table_no === currentTableNo && order.order_type === "2";
+        } else {
+          return order.order_type === "1";
+        }
+      });
+    }, [tableNo]);
+
+  const fetchOrders = useCallback(async () => {
+      if (!deviceId) return;
+      setLoadingOrders(true);
+      try {
+        const res = await fetch(
+          `https://dev2024.co.in/web/liquidity-backend/admin/api/tblOrderList/${deviceId}`
+        );
+        const data = await res.json();
+  
+        if (data.status === "1") {
+          const filteredOrders = (data.orders || [])
+            .filter((order: Order) => order.products && order.products.length > 0)
+            .sort((a: Order, b: Order) => {
+              const dateA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.order_time).getTime();
+              const dateB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.order_time).getTime();
+              return dateB - dateA;
+            });
+          setOrders(filteredOrders);
+        }
+      } catch (err) {
+        console.error("Orders fetch error:", err);
+      } finally {
+        setLoadingOrders(false);
+      }
+    }, [deviceId]);
+
+    useEffect(() => {
+    const matched = filterOrdersByTable(orders);
+    setMatchedOrders(matched);
+  }, [orders, tableNo, filterOrdersByTable]);
+
+  useEffect(() => {
+    if (deviceId) {
+      fetchCart();
+      fetchOrders();
+    }
+  }, [deviceId, fetchCart, fetchOrders]);
+
+  const handleViewTab = useCallback(() => {
+    router.push("/my-table");
+  }, [router]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -680,6 +822,8 @@ export default function Restaurant() {
     if (btn) btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }, [activeCategory]);
 
+  
+
   // Debug info
   console.log("🔍 RENDER DEBUG =>", {
     cartLoaded,
@@ -699,20 +843,27 @@ export default function Restaurant() {
       <header className="header">
         <button type="button" className="icon_only"></button>
         <div className="pageTitle">Menu</div>
-        {isLoggedIn ? (
-          <button 
-            type="button" 
-            className="icon_only"
-            onClick={() => setShowLogoutModal(true)}
-            title="Log out"
-          >
-            <LogOut size={20} />
-          </button>
-        ) : (
-          <button type="button" className="icon_only opacity-0 cursor-not-allowed" title="Log in required">
-            <LogOut size={20} />
-          </button>
-        )}
+        {isLoggedIn && (
+  <button 
+    type="button" 
+    className="icon_only"
+    onClick={() => setShowLogoutModal(true)}
+    title="Log out"
+  >
+    <LogOut size={20} />
+  </button>
+)}
+        {!loadingOrders ? (
+  matchedOrders.length > 0 ? (
+    <button type="button" className="icon_only" onClick={handleViewTab}>
+      <Receipt size={20} />
+    </button>
+  ) : (
+    <button type="button" className="icon_only"></button>
+  )
+) : (
+  <button type="button" className="icon_only"></button>
+)}
       </header>
 
       <section className="pageWrapper hasHeader hasMenu">

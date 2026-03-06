@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./my-table.module.scss";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
+import { X, LogOut, AlertTriangle } from "lucide-react";
 
 interface OrderProduct {
   id: string;
@@ -14,6 +15,7 @@ interface OrderProduct {
 }
 
 interface Order {
+  sqaure_order_id: any;
   id: string;
   unique_id: string;
   total_amount: string;
@@ -48,6 +50,37 @@ export default function MyTable() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const handleCancel = () => setShowConfirmModal(false);
+
+  const handleConfirm = async () => {
+    setShowConfirmModal(false);
+
+    // Run the merge-orders API call
+    const orderIds = filteredOrders.map(o => o.id);
+
+    try {
+      const res = await fetch("/api/merge-orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ order_ids: orderIds })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        router.push(`/bill/${data.square_order_id}`);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong while merging orders.");
+    }
+  };
 
   const handleBack = () => {
     router.back();
@@ -65,6 +98,30 @@ export default function MyTable() {
       router.push("/restaurant");
     }
   };
+
+//   const handleViewBill = async () => {
+
+//   const orderIds = filteredOrders.map(o => o.id);
+
+//   const res = await fetch("/api/merge-orders", {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json"
+//     },
+//     body: JSON.stringify({
+//       order_ids: orderIds
+//     })
+//   });
+
+//   const data = await res.json();
+
+//   if (data.success) {
+//     router.push(`/bill/${data.square_order_id}`);
+//   } else {
+//     alert(data.message);
+//   }
+// };
+
 
   // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
   const filterOrders = (allOrders: Order[]): Order[] => {
@@ -255,13 +312,103 @@ export default function MyTable() {
           >
             Order Another Item
           </button>
+          {filteredOrders.length > 1 && (
+            <button
+                  onClick={() => setShowConfirmModal(true)}
+                  className="mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  View Bill
+                </button>
+                
+          )}
+
         </div>
 
         <div className={styles.footerNote}>
           <p>To close your bill, or for any questions about your order,
           please speak to your server.</p>
         </div>
+
+        {showConfirmModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={handleCancel}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Merge Orders?</h3>
+                <p className="text-sm text-gray-500">
+                  This will merge all selected orders into one. You will not be able to undo this.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={handleCancel}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <X size={18} />
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                View Bill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}{showConfirmModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={handleCancel}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">View Bill</h3>
+                <p className="text-sm text-gray-500">
+                  This will merge all selected orders into one. You will not be able to undo this.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={handleCancel}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <X size={18} />
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                View Bill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
+
+      
     );
   };
 

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, FormEvent } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Receipt } from "lucide-react";
 import styles from "./restaurant-cart.module.scss";
 import dynamic from "next/dynamic";
 
@@ -117,28 +117,24 @@ export default function RestaurantCart() {
 
   const checkShopStatus = useCallback(async () => {
     if (!shopId) return;
-    
+
     try {
       setCheckingShopStatus(true);
+
       const res = await fetch(
         "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
       );
+
       const data = await res.json();
 
       if (data.status === "1" && Array.isArray(data.shops)) {
         const shop = data.shops.find((s: any) => String(s.id) === shopId);
+
         if (shop) {
           const isOpen = Number(shop.is_open ?? 0);
+
           setShopIsOpen(isOpen);
           setShopName(shop.name || "Restaurant");
-
-          // 👇 AUTO-REDIRECT if shop CLOSED
-          if (isOpen === 0) {
-            console.log("🛑 Shop closed! Redirecting to closed page...");
-            const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
-            router.replace(redirectUrl);
-            return;
-          }
         }
       }
     } catch (e) {
@@ -146,7 +142,15 @@ export default function RestaurantCart() {
     } finally {
       setCheckingShopStatus(false);
     }
-  }, [shopId, tableNo, router]);
+  }, [shopId]);
+
+
+  useEffect(() => {
+    if (shopIsOpen === 0) {
+      const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
+      router.replace(redirectUrl);
+    }
+  }, [shopIsOpen, shopId, tableNo, router]);
 
   // 👇 NEW: Check shop status on load (before anything else)
   useEffect(() => {
@@ -199,6 +203,9 @@ export default function RestaurantCart() {
       setLoadingOrders(false);
     }
   }, [deviceId]);
+
+
+
 
   useEffect(() => {
     const matched = filterOrdersByTable(orders);
@@ -358,54 +365,65 @@ export default function RestaurantCart() {
 
   // ✅ FIXED CHECKOUT - BUTTON STAYS DISABLED UNTIL REDIRECT
   const handleCheckout = async (e: FormEvent) => {
-    e.preventDefault();
-    
-    // 🚨 CHECK SHOP STATUS BEFORE PAYMENT
-  const isShopOpen = await checkShopStatusBeforePayment();
-  if (!isShopOpen) {
-    // 🆕 REDIRECT TO CLOSED PAGE INSTEAD OF ALERT
-    const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
-    router.replace(redirectUrl);
-    return;
-  }
-    // ✅ EARLY EXIT - 100% DOUBLE-CLICK PROOF
-    if (cartItems.length === 0 || loading || checkoutLoading) return;
+  e.preventDefault();
 
-    setCheckoutLoading(true); // ✅ DISABLE IMMEDIATELY
-    
-    try {
-      const orderResult = await createLiquidityOrder();
-      
-      if (orderResult?.success && orderResult.orderId) {
-        setRedirecting(true); // ✅ SHOW REDIRECTING
-        
-        // ✅ FAST 500ms DELAY
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // ✅ IMMEDIATE REDIRECT - NO CLEANUP BEFORE
-        const orderType = orderResult.orderType;
-        if (orderType === "1") {
-          router.push(`/bar-order-success/${orderResult.orderId}`);
-        } else {
-          router.push(`/table-order-success/${orderResult.orderId}`);
-        }
-        
-        return; // ✅ EXIT - STATES PERSIST UNTIL UNMOUNT
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert("Order processing failed. Please try again.");
-    } finally {
-      // ✅ ONLY CLEANUP ON ERROR - NEVER BEFORE REDIRECT
-      if (!redirecting) {
-        setTimeout(() => {
-          setCheckoutLoading(false);
-          setOrderProcessing(false);
-          setRedirecting(false);
-        }, 1000);
-      }
+  if (cartItems.length === 0 || loading || checkoutLoading) return;
+
+  setCheckoutLoading(true);
+
+  try {
+    const isShopOpen = await checkShopStatusBeforePayment();
+
+    if (!isShopOpen) {
+      const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
+      router.replace(redirectUrl);
+      return;
     }
-  };
+
+    const orderResult = await createLiquidityOrder();
+
+    if (orderResult?.success && orderResult.orderId) {
+
+    
+      setRedirecting(true);
+
+      await new Promise(resolve => setTimeout(resolve, 400));
+
+      if (orderResult.orderType === "1") {
+        router.push(`/bar-order-success/${orderResult.orderId}`);
+      } else {
+        router.push(`/table-order-success/${orderResult.orderId}`);
+      }
+
+      return;
+    }
+
+  } catch (error) {
+    console.error("Checkout error:", error);
+    alert("Order processing failed. Please try again.");
+  } finally {
+    if (!redirecting) {
+      setCheckoutLoading(false);
+    }
+  }
+};
+
+// const sendOrderToSquare = async (orderId: string) => {
+//   try {
+
+//     await fetch("/api/send-to-square", {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify({
+//         order_id: orderResult.orderId,
+//         device_id: deviceId
+//       })
+//     });
+
+//   } catch (error) {
+//     console.error("Square ticket failed:", error);
+//   }
+// };
         
   // 🆕 NEW: Single check before payment
 const checkShopStatusBeforePayment = async (): Promise<boolean> => {
@@ -413,16 +431,18 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
     const res = await fetch(
       "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
     );
+
     const data = await res.json();
 
     if (data.status === "1" && Array.isArray(data.shops)) {
       const shop = data.shops.find((s: any) => String(s.id) === shopId);
+
       if (shop) {
         const isOpen = Number(shop.is_open ?? 0);
-        setShopIsOpen(isOpen); // Update UI state too
         return isOpen === 1;
       }
     }
+
     return false;
   } catch (error) {
     console.error("Shop status check failed:", error);
@@ -448,6 +468,11 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
       router.push("/restaurant");
     }
   };
+
+  
+  const handleViewTab = useCallback(() => {
+    router.push("/my-table");
+  }, [router]);
 
   // 👇 Show loader until shop status confirmed
   if (checkingShopStatus || shopIsOpen === null) {
@@ -478,13 +503,12 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
   const QuantityButton = dynamic(() => import("@/components/common/QuantityButton/QuantityButton"), { ssr: false });
 
   // ✅ BULLETPROOF LOADING STATE
-  const isAnyLoading = 
-    loading || 
-    checkoutLoading || 
-    orderProcessing || 
-    redirecting || 
-    loadingOrders || 
-    cartItems.length === 0;
+  const isAnyLoading =
+  loading ||
+  checkoutLoading ||
+  orderProcessing ||
+  redirecting ||
+  loadingOrders;
 
   return (
     <>
@@ -501,7 +525,17 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
           </svg>
         </button>
         <div className="pageTitle">{shopName || "Menu"}</div>
-        <button type="button" className="icon_only"></button>
+        {!loadingOrders ? (
+  matchedOrders.length > 0 ? (
+    <button type="button" className="icon_only" onClick={handleViewTab}>
+      <Receipt size={20} />
+    </button>
+  ) : (
+    <button type="button" className="icon_only"></button>
+  )
+) : (
+  <button type="button" className="icon_only"></button>
+)}
       </header>
 
       <section className="pageWrapper hasHeader hasFooter">
