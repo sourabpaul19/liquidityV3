@@ -299,7 +299,7 @@ export default function MyTable() {
           >
             Order Another Item
           </button>
-          {filteredOrders.length > 1 && (
+          {filteredOrders.length > 0 && (
             <button
                   onClick={() => setShowConfirmModal(true)}
                   className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"

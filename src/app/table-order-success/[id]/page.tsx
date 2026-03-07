@@ -441,7 +441,7 @@ export default function OrderSuccess() {
             >
               View Tab
             </button>
-            {filteredOrders.length > 1 && (
+            {filteredOrders.length > 0 && (
             <button 
               type="button"
               onClick={() => setShowConfirmModal(true)}
