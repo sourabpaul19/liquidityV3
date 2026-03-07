@@ -25,6 +25,7 @@ interface Order {
   shop_id?: string;
   table_no: string;
   order_type?: string;
+  status?: string;   // ✅ add this
   products: OrderProduct[];
 }
 
@@ -132,6 +133,10 @@ export default function MyTable() {
       }
     });
   };
+
+  const lastOrder = filteredOrders[0];
+  console.log(lastOrder?.sqaure_order_id);
+  const lastOrderStatus = lastOrder?.status;
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -299,15 +304,14 @@ export default function MyTable() {
           >
             Order Another Item
           </button>
-          {filteredOrders.length > 0 && (
-            <button
-                  onClick={() => setShowConfirmModal(true)}
-                  className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  Get My Bill
-                </button>
-                
-          )}
+          {filteredOrders.length > 0 && lastOrderStatus !== "5" && (
+  <button
+    onClick={() => setShowConfirmModal(true)}
+    className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+  >
+    Get My Bill
+  </button>
+)}
 
         </div>
 
