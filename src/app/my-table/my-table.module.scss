@@ -79,6 +79,26 @@
     width: calc(100% - 32px);
     margin: 0 auto 16px;
 
+    .successIcon {
+        position: relative;
+        display: block;
+        margin: 0 auto;
+        width: 260px;
+        height: auto;
+        aspect-ratio: 1/1;
+        border-radius: 50%;
+
+        img {
+            object-fit: scale-down;
+        }
+    }
+    h3 {
+        font-size: 30px;
+        font-weight: 600;
+        max-width: 360px;
+        margin: 0 auto 30px;
+    }
+
     h4 {
         font-size: 18px;
         font-weight: 600;

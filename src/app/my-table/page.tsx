@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import styles from "./my-table.module.scss";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
 import { X, LogOut, AlertTriangle } from "lucide-react";
-
+import statusImg from "../../../public/images/cancel.png";
 interface OrderProduct {
   id: string;
   product_name: string;
@@ -72,7 +73,8 @@ export default function MyTable() {
       const data = await res.json();
 
       if (data.success) {
-        router.push(`/bill/${data.square_order_id}`);
+        //router.push(`/bill/${data.square_order_id}`);
+        router.push(`/bill-success/${data.square_order_id}`);
       } else {
         alert(data.message);
       }
@@ -98,30 +100,6 @@ export default function MyTable() {
       router.push("/restaurant");
     }
   };
-
-//   const handleViewBill = async () => {
-
-//   const orderIds = filteredOrders.map(o => o.id);
-
-//   const res = await fetch("/api/merge-orders", {
-//     method: "POST",
-//     headers: {
-//       "Content-Type": "application/json"
-//     },
-//     body: JSON.stringify({
-//       order_ids: orderIds
-//     })
-//   });
-
-//   const data = await res.json();
-
-//   if (data.success) {
-//     router.push(`/bill/${data.square_order_id}`);
-//   } else {
-//     alert(data.message);
-//   }
-// };
-
 
   // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
   const filterOrders = (allOrders: Order[]): Order[] => {
@@ -233,38 +211,47 @@ export default function MyTable() {
     if (allProducts.length === 0) {
       return (
         <div className="pageContainer py-4">
-          <div className={styles.billCard}>
-            <h4 className={styles.sectionTitle}>Items</h4>
-            <p className="text-sm text-gray-400 italic">
-              {getLocalStorage("table_number") 
-                ? `No items on Table #${getLocalStorage("table_number")} tab today`
-                : "No items on this bar tab today"
-              }
-            </p>
+          <div className={styles.billingArea}>
+            <div className={styles.successIcon}>
+              <Image src={statusImg} alt="Order status" fill />
+            </div>
 
-            <div className={styles.subtotalRow}>
+
+            {/* <div className={styles.subtotalRow}>
               <p className={styles.subtotalLabel}>Subtotal</p>
               <p className={styles.subtotalValue}>$0.00</p>
-            </div>
+            </div> */}
+            <h3 className="text-center mb-2">
+              {getLocalStorage("table_number") ? (
+                <>
+                  No items on <br />
+                  Table #{getLocalStorage("table_number")} tab today
+                </>
+              ) : (
+                "No items on this bar tab today"
+              )}
+            </h3>
 
             <button
               type="button"
               onClick={handleOrderAnother}
-              className={styles.primaryButton}
+              className='mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium'
+          
             >
-              Order Another Item
+              Order Now
             </button>
           </div>
 
-          <p className={styles.footerNote}>
-            To close your bill, or for any questions about your order,
-            please speak to your server.
-          </p>
+          <div className={styles.footerNote}>
+            <p>To close your bill, or for any questions about your order,
+            please speak to your server.</p>
+          </div>
         </div>
       );
     }
 
     return (
+      <>
       <div className="pageContainer py-4">
         <div className={styles.billingArea}>
           {/* Items heading */}
@@ -315,9 +302,9 @@ export default function MyTable() {
           {filteredOrders.length > 1 && (
             <button
                   onClick={() => setShowConfirmModal(true)}
-                  className="mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
-                  View Bill
+                  Get My Bill
                 </button>
                 
           )}
@@ -329,23 +316,25 @@ export default function MyTable() {
           please speak to your server.</p>
         </div>
 
-        {showConfirmModal && (
+        
+      </div>
+{showConfirmModal && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 bg-opacity-50 z-100 flex items-center justify-center p-4"
           onClick={handleCancel}
         >
           <div
             className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center flex-col gap-3 mb-3">
               <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-6 h-6 text-yellow-600" />
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Merge Orders?</h3>
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-gray-900">Get My Bill</h3>
                 <p className="text-sm text-gray-500">
-                  This will merge all selected orders into one. You will not be able to undo this.
+                  Warning: Once you request your bill, you cannot place any more orders. Are you sure you want to do this?
                 </p>
               </div>
             </div>
@@ -362,53 +351,13 @@ export default function MyTable() {
                 onClick={handleConfirm}
                 className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
               >
-                View Bill
-              </button>
-            </div>
-          </div>
-        </div>
-      )}{showConfirmModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={handleCancel}
-        >
-          <div
-            className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">View Bill</h3>
-                <p className="text-sm text-gray-500">
-                  This will merge all selected orders into one. You will not be able to undo this.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={handleCancel}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-              >
-                <X size={18} />
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirm}
-                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                View Bill
+                Get Bill
               </button>
             </div>
           </div>
         </div>
       )}
-      </div>
-
-      
+      </>
     );
   };
 
@@ -426,7 +375,7 @@ export default function MyTable() {
             />
           </svg>
         </button>
-        <div className="pageTitle">Current Tab</div>
+        <div className="pageTitle">My Table</div>
         <button type="button" className="icon_only"></button>
       </header>
 

@@ -28,6 +28,7 @@ const publicRoutes = [
   '/order-otp-verify',
   '/order-new-account',
   '/bill',
+  '/bill-success',
 ];
 
 export function middleware(request: NextRequest) {

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 interface LineItem {
   uid: string;
@@ -33,6 +34,26 @@ export default function BillPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const [outlet, setOutlet] = useState<any>(null);
+  const [tableNo, setTableNo] = useState("");
+
+  /* ------------------ Fetch Outlet + Table ------------------ */
+
+  useEffect(() => {
+    const shop = localStorage.getItem("selected_shop");
+    const table = localStorage.getItem("table_number");
+
+    if (shop) {
+      setOutlet(JSON.parse(shop));
+    }
+
+    if (table) {
+      setTableNo(table);
+    }
+  }, []);
+
+  /* ------------------ Fetch Square Order ------------------ */
+
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
 
@@ -60,12 +81,34 @@ export default function BillPage() {
     fetchOrder();
   }, [fetchOrder]);
 
-  const handleViewTab = useCallback(() => {
+  /* ------------------ Download PDF ------------------ */
+
+  const handleDownload = async () => {
+    const element = document.getElementById("receipt");
+
+    if (!element) return;
+
+    const canvas = await html2canvas(element);
+
+    const imgData = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF("p", "mm", "a4");
+
+    const imgWidth = 190;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+    pdf.save(`bill-${orderId}.pdf`);
+  };
+
+  const handleBack = () => {
     router.push("/my-table");
-  }, [router]);
+  };
 
   if (loading) return <p style={{ padding: 20 }}>Loading bill...</p>;
   if (!order) return <p style={{ padding: 20 }}>Order not found</p>;
+
+  /* ------------------ Calculations ------------------ */
 
   const subtotal =
     order.line_items?.reduce((sum, item) => {
@@ -74,16 +117,14 @@ export default function BillPage() {
     }, 0) || 0;
 
   const tax = (order.total_tax_money?.amount || 0) / 100;
+
   const total = subtotal + tax;
 
   return (
     <>
-      <header className="header flex items-center justify-between p-4 border-b border-gray-200">
-        <button
-          type="button"
-          className="icon_only"
-          onClick={handleViewTab} // fixed
-        >
+      {/* Header */}
+      <header className="header">
+        <button type="button" className="icon_only" onClick={handleBack}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path
               d="M15 6L9 12L15 18"
@@ -94,14 +135,35 @@ export default function BillPage() {
             />
           </svg>
         </button>
-        <div className="pageTitle font-bold text-lg">View Bill</div>
+        <div className="pageTitle">View Bill</div>
         <button type="button" className="icon_only"></button>
       </header>
 
-      <div style={{ padding: 20, maxWidth: 600, margin: "auto" }}>
-        <h2 className="text-xl font-bold mb-4">Bill</h2>
+      {/* Receipt */}
+        <section className="pageWrapper hasHeader">
+      <div
+        id="receipt"
+        style={{
+          padding: 20,
+          maxWidth: 500,
+          margin: "auto",
+          background: "#fff"
+        }}
+      >
+        {/* Outlet */}
 
-        <div className="mb-4">
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <h2 style={{ fontWeight: "bold" }}>{outlet?.name}</h2>
+          <p>Table No: {tableNo}</p>
+          <p>Order ID: {orderId}</p>
+          <p>{new Date().toLocaleString()}</p>
+        </div>
+
+        <hr />
+
+        {/* Items */}
+
+        <div style={{ marginTop: 15 }}>
           {order.line_items?.map((item) => {
             const price = item.base_price_money.amount / 100;
             const lineTotal = price * Number(item.quantity);
@@ -109,7 +171,11 @@ export default function BillPage() {
             return (
               <div
                 key={item.uid}
-                className="flex justify-between mb-2 text-gray-800"
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 6
+                }}
               >
                 <span>
                   {item.name} x {item.quantity}
@@ -120,25 +186,54 @@ export default function BillPage() {
           })}
         </div>
 
-        <hr className="my-2" />
+        <hr style={{ margin: "12px 0" }} />
 
-        <div className="flex justify-between mb-1">
+        {/* Subtotal */}
+
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
           <strong>Subtotal</strong>
           <strong>${subtotal.toFixed(2)}</strong>
         </div>
 
-        <div className="flex justify-between mb-1">
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span>Tax</span>
           <span>${tax.toFixed(2)}</span>
         </div>
 
-        <hr className="my-2" />
+        <hr style={{ margin: "12px 0" }} />
 
-        <div className="flex justify-between text-lg font-bold">
+        {/* Total */}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 18,
+            fontWeight: "bold"
+          }}
+        >
           <span>Total</span>
           <span>${total.toFixed(2)}</span>
         </div>
+
+        <hr style={{ margin: "12px 0" }} />
+
+        <div style={{ textAlign: "center", marginTop: 20 }}>
+          <p>Thank you for visiting!</p>
+        </div>
       </div>
+
+      {/* Download Button */}
+
+      <div style={{ padding: 20 }}>
+        <button
+          onClick={handleDownload}
+          className="mt-6 bg-primary text-white px-6 py-3 rounded-lg w-full max-w-sm"
+        >
+          Download Receipt
+        </button>
+      </div>
+      </section>
     </>
   );
 }
