@@ -479,8 +479,8 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
     return (
       <div className="flex items-center justify-center min-h-screen p-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Checking restaurant status...</p>
+          {/* <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Checking restaurant status...</p> */}
         </div>
       </div>
     );
@@ -675,6 +675,7 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
                       <div className="text-sm font-medium">Processing Order...</div>
+                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
                       <div className="text-xs mt-1 opacity-90">Please wait</div>
                     </div>
                   )}
@@ -683,8 +684,10 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                   {redirecting && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-                      <div className="text-sm font-medium">Redirecting...</div>
-                      <div className="text-xs mt-1 opacity-90">Almost there</div>
+                      <div className="text-sm font-medium">Processing Order...</div>
+                      {/* <div className="text-sm font-medium">Redirecting...</div> */}
+                      {/* <div className="text-xs mt-1 opacity-90">Almost there</div> */}
+                      <div className="text-xs mt-1 opacity-90">Please wait</div>
                     </div>
                   )}
                   
