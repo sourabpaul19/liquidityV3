@@ -105,7 +105,7 @@ export default function BillPage() {
     router.push("/my-table");
   };
 
-  if (loading) return <p style={{ padding: 20 }}>Loading bill...</p>;
+  if (loading) return <p style={{ padding: 20 }}></p>;
   if (!order) return <p style={{ padding: 20 }}>Order not found</p>;
 
   /* ------------------ Calculations ------------------ */

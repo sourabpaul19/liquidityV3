@@ -139,41 +139,53 @@ export default function MyTable() {
   const lastOrderStatus = lastOrder?.status;
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
-        const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
 
-        if (!deviceId) {
-          setLoading(false);
-          return;
-        }
+      const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
+      const tableNo = getLocalStorage("table_number") || ""; // ✅ Table number
+      const todayDate = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
 
-        const res = await fetch(
-          `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
-        );
-        if (!res.ok) {
-          setLoading(false);
-          return;
-        }
-
-        const data = await res.json();
-        const list: Order[] = Array.isArray(data) ? data : data.orders || [];
-        
-        // Initial filter
-        const filteredList = list.filter((order: Order) => 
-          order.products && order.products.length > 0
-        );
-        setOrders(filteredList);
-      } catch (e) {
-        console.error(e);
-      } finally {
+      if (!deviceId) {
         setLoading(false);
+        return;
       }
-    };
 
-    fetchOrders();
-  }, []);
+      // ✅ Include deviceId, todayDate, and tableNo in URL
+      const url = `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      const list: Order[] = Array.isArray(data) ? data : data.orders || [];
+
+      // Optional: filter client-side by shop_id and order_type
+      const currentShopId = getShopId();
+      const filteredList = list.filter((order: Order) => {
+        if (currentShopId && order.shop_id !== currentShopId) return false;
+
+        if (tableNo) {
+          return order.table_no === tableNo && order.order_type === "2";
+        } else {
+          return order.order_type === "1";
+        }
+      });
+
+      setOrders(filteredList);
+    } catch (e) {
+      console.error("Orders fetch error:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchOrders();
+}, []);
 
   // ✅ Filter orders whenever orders or localStorage changes
   useEffect(() => {
@@ -207,7 +219,7 @@ export default function MyTable() {
       return (
         <div className="pageContainer py-4">
           <div className={styles.billCard}>
-            <p className="text-sm text-gray-500 text-center">Loading...</p>
+            {/* <p className="text-sm text-gray-500 text-center">Loading...</p> */}
           </div>
         </div>
       );

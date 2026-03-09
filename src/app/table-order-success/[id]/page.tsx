@@ -200,41 +200,55 @@ export default function OrderSuccess() {
     const lastOrderStatus = lastOrder?.status;
   
     useEffect(() => {
-      const fetchOrders = async () => {
-        try {
-          setLoading(true);
-          const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
-  
-          if (!deviceId) {
-            setLoading(false);
-            return;
-          }
-  
-          const res = await fetch(
-            `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
-          );
-          if (!res.ok) {
-            setLoading(false);
-            return;
-          }
-  
-          const data = await res.json();
-          const list: Order[] = Array.isArray(data) ? data : data.orders || [];
-          
-          // Initial filter
-          const filteredList = list.filter((order: Order) => 
-            order.products && order.products.length > 0
-          );
-          setOrders(filteredList);
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setLoading(false);
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      
+      const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
+      const tableNo = getLocalStorage("table_number") || ""; // ✅ table number from localStorage
+      const todayDate = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+      if (!deviceId) {
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Include both todayDate and tableNo in the API path
+      const url = `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      const list: Order[] = Array.isArray(data) ? data : data.orders || [];
+
+      // Filter client-side for safety (shop_id / order_type)
+      const filteredList = list.filter((order: Order) => {
+        const currentShopId = getShopId();
+        const hasTableNumber = !!tableNo;
+
+        if (currentShopId && order.shop_id !== currentShopId) return false;
+
+        if (hasTableNumber) {
+          return order.table_no === tableNo && order.order_type === "2";
+        } else {
+          return order.order_type === "1";
         }
-      };
-  
-      fetchOrders();
-    }, []);
+      });
+
+      setOrders(filteredList);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchOrders();
+}, []);
   
     // ✅ Filter orders whenever orders or localStorage changes
     useEffect(() => {
@@ -393,7 +407,7 @@ export default function OrderSuccess() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          <p className="text-center mt-10">Loading order...</p>
+          {/* <p className="text-center mt-10">Loading order...</p> */}
         </div>
       </section>
     );

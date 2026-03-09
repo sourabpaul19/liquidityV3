@@ -160,49 +160,51 @@ export default function RestaurantCart() {
   }, [shopId, checkShopStatus]);
 
   // ✅ Filter orders by table and date
-  const filterOrdersByTable = useCallback((allOrders: Order[]) => {
-    const hasTableNumber = !!getLocalStorage("table_number");
+  const filterOrdersByTable = useCallback(
+  (allOrders: Order[]) => {
     const currentTableNo = getLocalStorage("table_number") || tableNo;
     const currentShopId = getShopId();
     const todayDate = getTodayDate();
+    const hasTableNumber = !!currentTableNo;
 
     return allOrders.filter((order) => {
       if (order.order_date !== todayDate) return false;
       if (currentShopId && order.shop_id !== currentShopId) return false;
-
-      if (hasTableNumber && currentTableNo) {
+      if (hasTableNumber) {
         return order.table_no === currentTableNo && order.order_type === "2";
-      } else {
-        return order.order_type === "1";
       }
+      return order.order_type === "1";
     });
-  }, [tableNo]);
+  },
+  [tableNo]
+);
 
   const fetchOrders = useCallback(async () => {
-    if (!deviceId) return;
-    setLoadingOrders(true);
-    try {
-      const res = await fetch(
-        `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
-      );
-      const data = await res.json();
+  if (!deviceId) return;
+  setLoadingOrders(true);
 
-      if (data.status === "1") {
-        const filteredOrders = (data.orders || [])
-          .filter((order: Order) => order.products && order.products.length > 0)
-          .sort((a: Order, b: Order) => {
-            const dateA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.order_time).getTime();
-            const dateB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.order_time).getTime();
-            return dateB - dateA;
-          });
-        setOrders(filteredOrders);
-      }
-    } catch (err) {
-      console.error("Orders fetch error:", err);
-    } finally {
-      setLoadingOrders(false);
+  try {
+    const today = new Date();
+    const orderDate = today.toISOString().split("T")[0];
+
+    // Get table number from localStorage or fallback
+    const tableNoFromStorage = getLocalStorage("table_number") || tableNo || '';
+
+    // Build URL with deviceId, orderDate, and tableNo
+    const url = `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status === "1") {
+      setOrders(data.orders || []);
     }
-  }, [deviceId]);
+  } catch (err) {
+    console.error("Orders fetch error:", err);
+  } finally {
+    setLoadingOrders(false);
+  }
+}, [deviceId, tableNo]);
 
 
 
