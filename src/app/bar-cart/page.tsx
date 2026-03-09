@@ -192,6 +192,8 @@ function NewCardPaymentForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    
     if (!stripe || !elements || !clientSecret || processing) return;
 
     setProcessing(true);
@@ -604,7 +606,7 @@ export default function RestaurantBarCart() {
     try {
       setCheckingShopStatus(true);
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+        "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
       );
       const data = await res.json();
 
@@ -667,7 +669,7 @@ export default function RestaurantBarCart() {
     setLoadingOrders(true);
     try {
       const res = await fetch(
-        `https://dev2024.co.in/web/liquidity-backend/admin/api/tblOrderList/${deviceId}`
+        `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
       );
       const data = await res.json();
 
@@ -759,7 +761,7 @@ export default function RestaurantBarCart() {
       formData.append("quantity", String(newQty));
 
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/updateTempCartData",
+        "https://backend.liquiditybars.com/admin/api/updateTempCartData",
         { method: "POST", body: formData }
       );
       const data = await res.json();
@@ -879,7 +881,7 @@ export default function RestaurantBarCart() {
 
     try {
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/createTblOrder",
+        "https://backend.liquiditybars.com/admin/api/createTblOrder",
         { method: "POST", body: formData }
       );
       const data = await res.json();
@@ -925,7 +927,7 @@ export default function RestaurantBarCart() {
 const checkShopStatusBeforePayment = async (): Promise<boolean> => {
   try {
     const res = await fetch(
-      "https://dev2024.co.in/web/liquidity-backend/admin/api/fetchDashboardDataForTempUsers"
+      "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
     );
     const data = await res.json();
 

@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     }
 
     const backendUrl =
-      "https://dev2024.co.in/web/liquidity-backend/admin/api/getTempCartDetailsForUser";
+      "https://backend.liquiditybars.com/admin/api/getTempCartDetailsForUser";
 
     const formData = new URLSearchParams();
     formData.append("user_id", user_id);   // can be "993" etc

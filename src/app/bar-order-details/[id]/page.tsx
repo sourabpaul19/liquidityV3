@@ -92,7 +92,7 @@ const handleBackClick = useCallback(() => {
       try {
         setLoading(true);
         const res = await fetch(
-          `https://dev2024.co.in/web/liquidity-backend/admin/api/tblOrderDetails/${id}`,
+          `https://backend.liquiditybars.com/admin/api/tblOrderDetails/${id}`,
           { cache: "no-store" }
         );
         const data = await res.json();
@@ -123,7 +123,7 @@ const handleBackClick = useCallback(() => {
 
       try {
         const res = await fetch(
-          `https://dev2024.co.in/web/liquidity-backend/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`,
+          `https://backend.liquiditybars.com/admin/api/getSquareOrderStatus/${order.sqaure_order_id}`,
           { cache: "no-store" }
         );
         const data = await res.json();

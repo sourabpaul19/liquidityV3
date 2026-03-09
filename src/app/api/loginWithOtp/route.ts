@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     // Send request to backend
     const apiResponse = await fetch(
-      "https://dev2024.co.in/web/liquidity-backend/admin/api/loginWithOtp",
+      "https://backend.liquiditybars.com/admin/api/loginWithOtp",
       {
         method: "POST",
         headers: {

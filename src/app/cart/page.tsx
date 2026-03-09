@@ -332,7 +332,7 @@ export default function Cart() {
     setLoadingOrders(true);
     try {
       const res = await fetch(
-        `https://dev2024.co.in/web/liquidity-backend/admin/api/orderList/${userId}`
+        `https://backend.liquiditybars.com/admin/api/orderList/${userId}`
       );
       const data = await res.json();
       if (
@@ -362,7 +362,7 @@ export default function Cart() {
     setWalletLoading(true);
     try {
       const res = await fetch(
-        `https://dev2024.co.in/web/liquidity-backend/admin/api/fetch_wallet_balance/${userId}`
+        `https://backend.liquiditybars.com/admin/api/fetch_wallet_balance/${userId}`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -451,7 +451,7 @@ export default function Cart() {
       formData.append("id", itemId);
       formData.append("quantity", String(newQty));
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/updateCartData",
+        "https://backend.liquiditybars.com/admin/api/updateCartData",
         {
           method: "POST",
           body: formData,
@@ -526,7 +526,7 @@ export default function Cart() {
 
     try {
       const res = await fetch(
-        "https://dev2024.co.in/web/liquidity-backend/admin/api/createOrder",
+        "https://backend.liquiditybars.com/admin/api/createOrder",
         { method: "POST", body: formData }
       );
       const data = await res.json();
