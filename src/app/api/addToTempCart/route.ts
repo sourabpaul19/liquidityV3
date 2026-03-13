@@ -8,7 +8,7 @@ export async function POST(req: Request) {
 
     // Send to Liquidity backend as x-www-form-urlencoded
     const backendRes = await fetch(
-      "https://backend.liquiditybars.com/admin/api/addToTempCart/",
+      "https://admin.liquiditybars.com/admin/api/addToTempCart/",
       {
         method: "POST",
         headers: {

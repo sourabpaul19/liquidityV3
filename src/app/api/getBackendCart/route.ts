@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     if (user_id) body.append("user_id", user_id);
 
     const backendRes = await fetch(
-      "https://backend.liquiditybars.com/admin/api/getTempCartDetailsForUser/",
+      "https://admin.liquiditybars.com/admin/api/getTempCartDetailsForUser/",
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

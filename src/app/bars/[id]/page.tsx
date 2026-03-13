@@ -12,7 +12,7 @@ import { Plus } from "lucide-react";
 import styles from "../bars.module.scss";
 
 const BACKEND_ADD_CART_URL =
-  "https://backend.liquiditybars.com/admin/api/addMultipleCartItems";
+  "https://admin.liquiditybars.com/admin/api/addMultipleCartItems";
 
 // ----------------------------
 // 📌 TypeScript Interfaces
@@ -106,7 +106,7 @@ export default function Bars() {
           shopData = JSON.parse(storedShop);
         } else {
           const response = await fetch(
-            `https://backend.liquiditybars.com/admin/api/fetchDashboardDataForUsers/${userId}`
+            `https://admin.liquiditybars.com/admin/api/fetchDashboardDataForUsers/${userId}`
           );
           const data: DashboardShop = await response.json();
 
@@ -138,7 +138,7 @@ export default function Bars() {
     const fetchRecentOrders = async (shopId: string) => {
       try {
         const response = await fetch(
-          `https://backend.liquiditybars.com/admin/api/myRecenntOrdersShopWise/${userId}/${shopId}`
+          `https://admin.liquiditybars.com/admin/api/myRecenntOrdersShopWise/${userId}/${shopId}`
         );
 
         const data: RecentOrdersApiResponse = await response.json();

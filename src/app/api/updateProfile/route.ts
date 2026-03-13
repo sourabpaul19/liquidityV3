@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // Call backend API
     const res = await fetch(
-      "https://backend.liquiditybars.com/admin/api/updateProfile/",
+      "https://admin.liquiditybars.com/admin/api/updateProfile/",
       {
         method: "POST",
         headers: {

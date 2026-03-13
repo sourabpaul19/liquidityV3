@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const url = `https://backend.liquiditybars.com/admin/api/deleteFromTempCart/${id}`;
+    const url = `https://admin.liquiditybars.com/admin/api/deleteFromTempCart/${id}`;
 
     const apiRes = await fetch(url, {
       method: "GET",

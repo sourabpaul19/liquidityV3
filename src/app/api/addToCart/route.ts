@@ -18,8 +18,8 @@ export async function POST(req: Request) {
 
     // ✅ ROUTE BY user_id PRESENCE
     const endpoint = user_id 
-      ? "https://backend.liquiditybars.com/admin/api/addMultipleCartItems/"
-      : "https://backend.liquiditybars.com/admin/api/addMultipleTempCartItems";
+      ? "https://admin.liquiditybars.com/admin/api/addMultipleCartItems/"
+      : "https://admin.liquiditybars.com/admin/api/addMultipleTempCartItems";
 
     console.log("→ ENDPOINT:", endpoint);
     console.log("PAYLOAD:", params.toString());

@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     formData.append("item_id", item_id);
 
     const apiRes = await fetch(
-      "https://backend.liquiditybars.com/admin/api/deleteFromCart/",
+      "https://admin.liquiditybars.com/admin/api/deleteFromCart/",
       {
         method: "POST",
         headers: {

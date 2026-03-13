@@ -153,7 +153,7 @@ export default function MyTable() {
       }
 
       // ✅ Include deviceId, todayDate, and tableNo in URL
-      const url = `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
+      const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
 
       const res = await fetch(url);
       if (!res.ok) {

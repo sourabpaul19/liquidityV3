@@ -37,8 +37,8 @@ export async function POST(req: Request) {
 
     // Choose backend endpoint based on login status
     const backendUrl = user_id 
-      ? "https://backend.liquiditybars.com/admin/api/getCartDetailsForUser"
-      : "https://backend.liquiditybars.com/admin/api/getTempCartDetailsForUser";
+      ? "https://admin.liquiditybars.com/admin/api/getCartDetailsForUser"
+      : "https://admin.liquiditybars.com/admin/api/getTempCartDetailsForUser";
 
     // Prepare backend request
     const formData = new URLSearchParams();

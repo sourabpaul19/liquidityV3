@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const backendResponse = await fetch(
-      "https://backend.liquiditybars.com/admin/api/getCartDetailsForUser",
+      "https://admin.liquiditybars.com/admin/api/getCartDetailsForUser",
       {
         method: "POST",
         headers: {

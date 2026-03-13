@@ -58,7 +58,7 @@ export default function OTPVerify() {
       formData.append("otp", otp);
 
       const response = await fetch(
-        "https://backend.liquiditybars.com/admin/api/otpVerification/",
+        "https://admin.liquiditybars.com/admin/api/otpVerification/",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

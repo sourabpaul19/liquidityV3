@@ -48,7 +48,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     // Backend API call
     const response = await fetch(
-      "https://backend.liquiditybars.com/admin/api/createOrder/",
+      "https://admin.liquiditybars.com/admin/api/createOrder/",
       {
         method: "POST",
         body: form,

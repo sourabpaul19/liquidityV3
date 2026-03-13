@@ -168,7 +168,7 @@ export default function HomePage() {
     const fetchDashboardData = async () => {
       try {
         const dashboardRes = await fetch(
-          `https://backend.liquiditybars.com/admin/api/fetchDashboardDataForUsers/${userId}`,
+          `https://admin.liquiditybars.com/admin/api/fetchDashboardDataForUsers/${userId}`,
           { cache: 'no-store' }
         );
         const dashboardData: DashboardResponse = await dashboardRes.json();

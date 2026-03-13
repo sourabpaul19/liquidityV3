@@ -114,7 +114,7 @@ export default function TablePage() {
     const fetchShopData = async () => {
       try {
         const response = await fetch(
-          'https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers'
+          'https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers'
         );
         const data = await response.json();
 

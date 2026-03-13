@@ -122,7 +122,7 @@ export default function RestaurantCart() {
       setCheckingShopStatus(true);
 
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+        "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
       );
 
       const data = await res.json();
@@ -191,7 +191,7 @@ export default function RestaurantCart() {
     const tableNoFromStorage = getLocalStorage("table_number") || tableNo || '';
 
     // Build URL with deviceId, orderDate, and tableNo
-    const url = `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
+    const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
 
     const res = await fetch(url);
     const data = await res.json();
@@ -273,7 +273,7 @@ export default function RestaurantCart() {
       formData.append("quantity", String(newQty));
 
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/updateTempCartData",
+        "https://admin.liquiditybars.com/admin/api/updateTempCartData",
         { method: "POST", body: formData }
       );
       const data = await res.json();
@@ -345,7 +345,7 @@ export default function RestaurantCart() {
     try {
       setOrderProcessing(true);
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/createTblOrder",
+        "https://admin.liquiditybars.com/admin/api/createTblOrder",
         { method: "POST", body: formData }
       );
       const data = await res.json();
@@ -431,7 +431,7 @@ export default function RestaurantCart() {
 const checkShopStatusBeforePayment = async (): Promise<boolean> => {
   try {
     const res = await fetch(
-      "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+      "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
     );
 
     const data = await res.json();

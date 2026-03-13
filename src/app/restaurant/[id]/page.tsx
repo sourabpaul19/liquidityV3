@@ -357,7 +357,7 @@ export default function Restaurant() {
         console.log("Current shop:", shopId, "Cart shop:", cartShopId);
 
         const res = await fetch(
-          `https://backend.liquiditybars.com/admin/api/clearTempCart/${deviceId}`,
+          `https://admin.liquiditybars.com/admin/api/clearTempCart/${deviceId}`,
           { method: "POST" }
         );
 
@@ -402,7 +402,7 @@ export default function Restaurant() {
   //   const fetchStoreData = async () => {
   //     try {
   //       const res = await fetch(
-  //         "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+  //         "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
   //       );
   //       const data = await res.json();
 
@@ -444,7 +444,7 @@ export default function Restaurant() {
   const fetchStoreData = async () => {
     try {
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+        "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
       );
       const data = await res.json();
 
@@ -498,7 +498,7 @@ export default function Restaurant() {
     let cancelled = false;
 
     fetch(
-      `https://backend.liquiditybars.com/admin/api/fetchCategoriesByShop/${shopId}`
+      `https://admin.liquiditybars.com/admin/api/fetchCategoriesByShop/${shopId}`
     )
       .then((r) => r.json())
       .then((data) => {
@@ -592,7 +592,7 @@ export default function Restaurant() {
   const checkShopStatusBeforeAdd = async (): Promise<boolean> => {
   try {
     const res = await fetch(
-      "https://backend.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+      "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
     );
     const data = await res.json();
 
@@ -764,7 +764,7 @@ export default function Restaurant() {
       setLoadingOrders(true);
       try {
         const res = await fetch(
-          `https://backend.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
+          `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
         );
         const data = await res.json();
   

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
     // Call backend
     const backendRes = await fetch(
-      "https://backend.liquiditybars.com/admin/api/addMultipleCartItems/",
+      "https://admin.liquiditybars.com/admin/api/addMultipleCartItems/",
       {
         method: "POST",
         headers: {

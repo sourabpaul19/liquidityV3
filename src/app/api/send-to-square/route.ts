@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     // 1️⃣ Fetch all orders for this device
     const listRes = await fetch(
-      `https://backend.liquiditybars.com/admin/api/tblOrderList/${device_id}`
+      `https://admin.liquiditybars.com/admin/api/tblOrderList/${device_id}`
     );
 
     const listData = await listRes.json();

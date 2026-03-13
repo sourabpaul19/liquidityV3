@@ -272,7 +272,7 @@ function CheckoutInner() {
 
     try {
       const res = await fetch(
-        `https://backend.liquiditybars.com/admin/api/orderList/${userId}`
+        `https://admin.liquiditybars.com/admin/api/orderList/${userId}`
       );
       const data = await res.json();
 
@@ -302,7 +302,7 @@ function CheckoutInner() {
 
     try {
       const res = await fetch(
-        `https://backend.liquiditybars.com/admin/api/fetch_wallet_balance/${userId}`
+        `https://admin.liquiditybars.com/admin/api/fetch_wallet_balance/${userId}`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -372,7 +372,7 @@ function CheckoutInner() {
       formData.append("quantity", quantity.toString());
 
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/updateTempCartData",
+        "https://admin.liquiditybars.com/admin/api/updateTempCartData",
         { method: "POST", body: formData }
       );
 
@@ -456,7 +456,7 @@ function CheckoutInner() {
 
     try {
       const res = await fetch(
-        "https://backend.liquiditybars.com/admin/api/createOrder",
+        "https://admin.liquiditybars.com/admin/api/createOrder",
         { method: "POST", body: formData }
       );
       const data = await res.json();

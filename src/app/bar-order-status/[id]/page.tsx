@@ -111,7 +111,7 @@ export default function OrderSuccess() {
   const fetchOrderDetails = useCallback(async (): Promise<Order | null> => {
     try {
       const res = await fetch(
-        `https://backend.liquiditybars.com/admin/api/tblOrderDetails/${id}`,
+        `https://admin.liquiditybars.com/admin/api/tblOrderDetails/${id}`,
         { cache: "no-store" }
       );
       const data = await res.json();
@@ -137,7 +137,7 @@ export default function OrderSuccess() {
     async (squareOrderId: string): Promise<SquareStatus> => {
       try {
         const res = await fetch(
-          `https://backend.liquiditybars.com/admin/api/getSquareOrderStatus/${squareOrderId}`,
+          `https://admin.liquiditybars.com/admin/api/getSquareOrderStatus/${squareOrderId}`,
           { cache: "no-store" }
         );
         const data = await res.json();

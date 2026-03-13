@@ -86,7 +86,7 @@ export default function NewAccount() {
       });
 
       const response = await fetch(
-        "https://backend.liquiditybars.com/admin/api/updateProfile/",
+        "https://admin.liquiditybars.com/admin/api/updateProfile/",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

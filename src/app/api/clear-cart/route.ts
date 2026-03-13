@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const shopId = body.shop_id;
 
     // Forward to your backend API
-    const response = await fetch('https://backend.liquiditybars.com/admin/api/clearTempCart/device_id', {
+    const response = await fetch('https://admin.liquiditybars.com/admin/api/clearTempCart/device_id', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

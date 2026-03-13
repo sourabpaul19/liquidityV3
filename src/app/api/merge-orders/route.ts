@@ -4,7 +4,7 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const res = await fetch(
-      "https://backend.liquiditybars.com/admin/api/mergeOrders",
+      "https://admin.liquiditybars.com/admin/api/mergeOrders",
       {
         method: "POST",
         headers: {
