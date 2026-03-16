@@ -676,9 +676,9 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                   {orderProcessing && !redirecting && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-                      <div className="text-sm font-medium">Processing Order...</div>
                       {/* <div className="text-sm font-medium">Processing Order...</div> */}
-                      <div className="text-xs mt-1 opacity-90">Please wait</div>
+                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
+                      {/* <div className="text-xs mt-1 opacity-90">Please wait</div> */}
                     </div>
                   )}
                   
@@ -686,10 +686,10 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                   {redirecting && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-                      <div className="text-sm font-medium">Processing Order...</div>
+                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
                       {/* <div className="text-sm font-medium">Redirecting...</div> */}
                       {/* <div className="text-xs mt-1 opacity-90">Almost there</div> */}
-                      <div className="text-xs mt-1 opacity-90">Please wait</div>
+                      {/* <div className="text-xs mt-1 opacity-90">Please wait</div> */}
                     </div>
                   )}
                   
@@ -705,8 +705,7 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                 }`}>
                   {loading ? (
                     <>
-                      <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                      Loading...
+                      <Loader2 className="w-6 h-6 animate-spin mr-2" />                      
                     </>
                   ) : cartItems.length === 0 ? (
                     'Empty Cart'

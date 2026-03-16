@@ -413,7 +413,7 @@ export default function OrderSuccess() {
     );
   }
 
-  if (error || !order) {
+  if (!order) {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
@@ -436,7 +436,7 @@ export default function OrderSuccess() {
             </div>
 
             <h4 className="text-center mb-2">
-              {getStatusMessage(squareStatus)}
+              {getStatusMessage(squareStatus) || 'Your order has been placed, and will be with you shortly'}
             </h4>
 
             <p className="text-center">
