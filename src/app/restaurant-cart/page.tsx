@@ -32,6 +32,7 @@ interface OrderProduct {
 }
 
 interface Order {
+  sqaure_order_id: boolean;
   id: string;
   unique_id: string;
   amount: string;
@@ -453,8 +454,26 @@ export default function RestaurantCart() {
   };
 
   const handleViewTab = useCallback(() => {
-    router.push("/my-table");
-  }, [router]);
+    if (!matchedOrders || matchedOrders.length === 0) {
+      router.push("/my-table");
+      return;
+    }
+  
+    const orderResult = matchedOrders[0]; // or find a specific one
+  
+    // If status === "5" go to bill success
+    if (orderResult.status === "5" && orderResult.sqaure_order_id) {
+      router.push(`/bill-success/${orderResult.sqaure_order_id}`);
+      return;
+    }
+  
+    // Otherwise branch by order type
+    if (orderResult.order_type === "1") {
+      router.push(`/bar-order-status/${orderResult.id}`);
+    } else {
+      router.push(`/table-order-success/${orderResult.id}`);
+    }
+  }, [matchedOrders, router]);
 
   if (checkingShopStatus || shopIsOpen === null) {
     return (

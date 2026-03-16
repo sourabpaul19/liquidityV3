@@ -101,8 +101,12 @@ export default function BillPage() {
     pdf.save(`bill-${orderId}.pdf`);
   };
 
+  // const handleBack = () => {
+  //   router.push("/my-table");
+  // };
+
   const handleBack = () => {
-    router.push("/my-table");
+    router.back();
   };
 
   if (loading) return <p style={{ padding: 20 }}></p>;

@@ -83,6 +83,7 @@ interface OrderProduct {
 }
 
 interface Order {
+  sqaure_order_id: any;
   id: string;
   unique_id: string;
   amount: string;
@@ -741,65 +742,90 @@ export default function Restaurant() {
     setShopName(storedShopName);
   }, []);
 
-  const filterOrdersByTable = useCallback((allOrders: Order[]) => {
-      const hasTableNumber = !!getLocalStorage("table_number");
-      const currentTableNo = getLocalStorage("table_number") || tableNo;
-      const currentShopId = getShopId();
-      const todayDate = getTodayDate();
+  const filterOrdersByTable = useCallback(
+      (allOrders: Order[]) => {
+        const currentTableNo = getLocalStorage("table_number") || tableNo;
+        const currentShopId = getShopId();
+        const todayDate = getTodayDate();
+        const hasTableNumber = !!currentTableNo;
   
-      return allOrders.filter((order) => {
-        if (order.order_date !== todayDate) return false;
-        if (currentShopId && order.shop_id !== currentShopId) return false;
-  
-        if (hasTableNumber && currentTableNo) {
-          return order.table_no === currentTableNo && order.order_type === "2";
-        } else {
+        return allOrders.filter((order) => {
+          if (order.order_date !== todayDate) return false;
+          if (currentShopId && order.shop_id !== currentShopId) return false;
+          if (hasTableNumber) {
+            return order.table_no === currentTableNo && order.order_type === "2";
+          }
           return order.order_type === "1";
-        }
-      });
-    }, [tableNo]);
-
-  const fetchOrders = useCallback(async () => {
+        });
+      },
+      [tableNo]
+    );
+  
+    const fetchOrders = useCallback(async () => {
       if (!deviceId) return;
       setLoadingOrders(true);
+  
       try {
-        const res = await fetch(
-          `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}`
-        );
+        const today = new Date();
+        const orderDate = today.toISOString().split("T")[0];
+  
+        const tableNoFromStorage =
+          getLocalStorage("table_number") || tableNo || "";
+  
+        const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
+  
+        const res = await fetch(url);
         const data = await res.json();
   
         if (data.status === "1") {
-          const filteredOrders = (data.orders || [])
-            .filter((order: Order) => order.products && order.products.length > 0)
-            .sort((a: Order, b: Order) => {
-              const dateA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.order_time).getTime();
-              const dateB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.order_time).getTime();
-              return dateB - dateA;
-            });
-          setOrders(filteredOrders);
+          setOrders(data.orders || []);
         }
       } catch (err) {
         console.error("Orders fetch error:", err);
       } finally {
         setLoadingOrders(false);
       }
-    }, [deviceId]);
+    }, [deviceId, tableNo]);
+  
+    useEffect(() => {
+      const matched = filterOrdersByTable(orders);
+      setMatchedOrders(matched);
+    }, [orders, tableNo, filterOrdersByTable]);
 
     useEffect(() => {
-    const matched = filterOrdersByTable(orders);
-    setMatchedOrders(matched);
-  }, [orders, tableNo, filterOrdersByTable]);
-
-  useEffect(() => {
     if (deviceId) {
       fetchCart();
       fetchOrders();
     }
   }, [deviceId, fetchCart, fetchOrders]);
 
+
+  // const handleViewTab = useCallback(() => {
+  //   router.push("/my-table");
+  // }, [router]);
+
   const handleViewTab = useCallback(() => {
+  if (!matchedOrders || matchedOrders.length === 0) {
     router.push("/my-table");
-  }, [router]);
+    return;
+  }
+
+  const orderResult = matchedOrders[0]; // or find a specific one
+
+  // If status === "5" go to bill success
+  if (orderResult.status === "5" && orderResult.sqaure_order_id) {
+    router.push(`/bill-success/${orderResult.sqaure_order_id}`);
+    return;
+  }
+
+  // Otherwise branch by order type
+  if (orderResult.order_type === "1") {
+    router.push(`/bar-order-status/${orderResult.id}`);
+  } else {
+    router.push(`/table-order-success/${orderResult.id}`);
+  }
+}, [matchedOrders, router]);
+
 
   useEffect(() => {
     const onScroll = () => {
