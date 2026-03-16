@@ -48,7 +48,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   RESERVED: "The Bar Is Preparing Your Order",
   PREPARED: "Your Order Is Ready For Pickup",
   COMPLETED: "Your Order Has Been Collected",
-  null: "Your order is being processed",
+  null: "Your order has been placed, and will be with you shortly",
 };
 
 const getStatusMessage = (status: SquareStatus) => {
@@ -99,36 +99,7 @@ export default function OrderSuccess() {
     }
   }, []);
 
-  const handleCancel = () => setShowConfirmModal(false);
-
-  const handleConfirm = async () => {
-    setShowConfirmModal(false);
-
-    // Run the merge-orders API call
-    const orderIds = filteredOrders.map(o => o.id);
-
-    try {
-      const res = await fetch("/api/merge-orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ order_ids: orderIds })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        //router.push(`/bill/${data.square_order_id}`);
-        router.push(`/bill-success/${data.square_order_id}`);
-      } else {
-        alert(data.message);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Something went wrong while merging orders.");
-    }
-  };
+  
 
   const handleBack = useCallback(() => {
     clearPolling();
@@ -335,6 +306,37 @@ export default function OrderSuccess() {
     },
     []
   );
+
+  const handleCancel = () => setShowConfirmModal(false);
+
+  const handleConfirm = async () => {
+    setShowConfirmModal(false);
+
+    // Run the merge-orders API call
+    const orderIds = filteredOrders.map(o => o.id);
+
+    try {
+      const res = await fetch("/api/merge-orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ order_ids: orderIds })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        //router.push(`/bill/${data.square_order_id}`);
+        router.push(`/bill-success/${data.square_order_id}`);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong while merging orders.");
+    }
+  };
 
   // -----------------------------
   // EFFECT: INITIAL LOAD + POLLING

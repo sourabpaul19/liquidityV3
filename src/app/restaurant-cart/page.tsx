@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2, Receipt } from "lucide-react";
 import styles from "./restaurant-cart.module.scss";
 import dynamic from "next/dynamic";
+import QuantityButton from "@/components/common/QuantityButton/QuantityButton";
 
 interface CartItem {
   id: string;
@@ -54,14 +55,19 @@ export default function RestaurantCart() {
   const [tableNo, setTableNo] = useState<string>("");
   const [shopId, setShopId] = useState<string>("");
   const [shopName, setShopName] = useState<string>("");
+
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartTotal, setCartTotal] = useState<number>(0);
+
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
   const [matchedOrders, setMatchedOrders] = useState<Order[]>([]);
-  
-  // ✅ ENHANCED LOADING STATES
+
+  // cart loading only
+  const [cartLoading, setCartLoading] = useState<boolean>(true);
+  // orders loading
+  const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
+
+  // checkout / order creation states
   const [checkoutLoading, setCheckoutLoading] = useState<boolean>(false);
   const [orderProcessing, setOrderProcessing] = useState<boolean>(false);
   const [redirecting, setRedirecting] = useState<boolean>(false);
@@ -69,13 +75,11 @@ export default function RestaurantCart() {
   const [shopIsOpen, setShopIsOpen] = useState<number | null>(null);
   const [checkingShopStatus, setCheckingShopStatus] = useState(true);
 
-  // ✅ Safe localStorage helper
   const getLocalStorage = (key: string): string => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(key) || "";
   };
 
-  // ✅ Get current shop ID helper
   const getShopId = (): string => {
     const selected_shop = getLocalStorage("selected_shop");
     return selected_shop
@@ -83,15 +87,14 @@ export default function RestaurantCart() {
       : getLocalStorage("shop_id");
   };
 
-  // ✅ Get today's date
   const getTodayDate = (): string => {
     return new Date().toISOString().split("T")[0];
   };
 
-  // ✅ Load from localStorage
   useEffect(() => {
     const storedDevice = getLocalStorage("device_id");
-    const storedTable = getLocalStorage("table_number") || getLocalStorage("table_no");
+    const storedTable =
+      getLocalStorage("table_number") || getLocalStorage("table_no");
     const storedShop = getLocalStorage("selected_shop");
     const storedShopParsed = storedShop ? JSON.parse(storedShop) : {};
     const storedShopId = storedShopParsed?.id || getLocalStorage("shop_id");
@@ -113,7 +116,6 @@ export default function RestaurantCart() {
     setShopId(storedShopId);
     setShopName(storedShopName);
   }, []);
-
 
   const checkShopStatus = useCallback(async () => {
     if (!shopId) return;
@@ -144,70 +146,65 @@ export default function RestaurantCart() {
     }
   }, [shopId]);
 
-
   useEffect(() => {
     if (shopIsOpen === 0) {
-      const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
+      const redirectUrl = `/restaurant-closed/${shopId}${
+        tableNo ? `?table=${tableNo}` : ""
+      }`;
       router.replace(redirectUrl);
     }
   }, [shopIsOpen, shopId, tableNo, router]);
 
-  // 👇 NEW: Check shop status on load (before anything else)
   useEffect(() => {
     if (shopId) {
       checkShopStatus();
     }
   }, [shopId, checkShopStatus]);
 
-  // ✅ Filter orders by table and date
   const filterOrdersByTable = useCallback(
-  (allOrders: Order[]) => {
-    const currentTableNo = getLocalStorage("table_number") || tableNo;
-    const currentShopId = getShopId();
-    const todayDate = getTodayDate();
-    const hasTableNumber = !!currentTableNo;
+    (allOrders: Order[]) => {
+      const currentTableNo = getLocalStorage("table_number") || tableNo;
+      const currentShopId = getShopId();
+      const todayDate = getTodayDate();
+      const hasTableNumber = !!currentTableNo;
 
-    return allOrders.filter((order) => {
-      if (order.order_date !== todayDate) return false;
-      if (currentShopId && order.shop_id !== currentShopId) return false;
-      if (hasTableNumber) {
-        return order.table_no === currentTableNo && order.order_type === "2";
-      }
-      return order.order_type === "1";
-    });
-  },
-  [tableNo]
-);
+      return allOrders.filter((order) => {
+        if (order.order_date !== todayDate) return false;
+        if (currentShopId && order.shop_id !== currentShopId) return false;
+        if (hasTableNumber) {
+          return order.table_no === currentTableNo && order.order_type === "2";
+        }
+        return order.order_type === "1";
+      });
+    },
+    [tableNo]
+  );
 
   const fetchOrders = useCallback(async () => {
-  if (!deviceId) return;
-  setLoadingOrders(true);
+    if (!deviceId) return;
+    setLoadingOrders(true);
 
-  try {
-    const today = new Date();
-    const orderDate = today.toISOString().split("T")[0];
+    try {
+      const today = new Date();
+      const orderDate = today.toISOString().split("T")[0];
 
-    // Get table number from localStorage or fallback
-    const tableNoFromStorage = getLocalStorage("table_number") || tableNo || '';
+      const tableNoFromStorage =
+        getLocalStorage("table_number") || tableNo || "";
 
-    // Build URL with deviceId, orderDate, and tableNo
-    const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
+      const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${orderDate}/${tableNoFromStorage}`;
 
-    const res = await fetch(url);
-    const data = await res.json();
+      const res = await fetch(url);
+      const data = await res.json();
 
-    if (data.status === "1") {
-      setOrders(data.orders || []);
+      if (data.status === "1") {
+        setOrders(data.orders || []);
+      }
+    } catch (err) {
+      console.error("Orders fetch error:", err);
+    } finally {
+      setLoadingOrders(false);
     }
-  } catch (err) {
-    console.error("Orders fetch error:", err);
-  } finally {
-    setLoadingOrders(false);
-  }
-}, [deviceId, tableNo]);
-
-
-
+  }, [deviceId, tableNo]);
 
   useEffect(() => {
     const matched = filterOrdersByTable(orders);
@@ -216,7 +213,7 @@ export default function RestaurantCart() {
 
   const fetchCart = useCallback(async () => {
     if (!deviceId) return;
-    setLoading(true);
+    setCartLoading(true);
     try {
       const res = await fetch("/api/tableGetCart", {
         method: "POST",
@@ -235,13 +232,13 @@ export default function RestaurantCart() {
     } catch (err) {
       console.error("Cart fetch error:", err);
     } finally {
-      setLoading(false);
+      setCartLoading(false);
     }
   }, [deviceId]);
 
   const removeItem = async (itemId: string) => {
     if (!deviceId || !itemId) return;
-    setLoading(true);
+    setCartLoading(true);
     try {
       const res = await fetch("/api/deleteFromTempCart", {
         method: "POST",
@@ -259,13 +256,13 @@ export default function RestaurantCart() {
       console.error("Delete error:", err);
       alert("Failed to remove item");
     } finally {
-      setLoading(false);
+      setCartLoading(false);
     }
   };
 
   const updateQuantity = async (itemId: string, newQty: number) => {
     if (newQty === 0) return removeItem(itemId);
-    setLoading(true);
+    setCartLoading(true);
     try {
       const formData = new FormData();
       formData.append("device_id", deviceId);
@@ -286,7 +283,7 @@ export default function RestaurantCart() {
       console.error("Cart update error:", err);
       alert("Failed to update cart.");
     } finally {
-      setLoading(false);
+      setCartLoading(false);
     }
   };
 
@@ -308,12 +305,13 @@ export default function RestaurantCart() {
   const getUserInfo = () => {
     return {
       user_name: getLocalStorage("user_name") || "Guest",
-      user_email: getLocalStorage("user_email") || "user@liquiditybars.com",
-      user_mobile: getLocalStorage("user_mobile") || "+10000000000",
+      user_email:
+        getLocalStorage("user_email") || "user@liquiditybars.com",
+      user_mobile:
+        getLocalStorage("user_mobile") || "+10000000000",
     };
   };
 
-  // ✅ FIXED ORDER CREATION
   const createLiquidityOrder = async () => {
     const { user_name, user_email, user_mobile } = getUserInfo();
     const currentShopId = getShopId();
@@ -323,7 +321,9 @@ export default function RestaurantCart() {
       return null;
     }
 
-    const transactionId = `LIQUIDITY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const transactionId = `LIQUIDITY_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
     const orderType = getOrderType();
 
     const formData = new FormData();
@@ -349,7 +349,7 @@ export default function RestaurantCart() {
         { method: "POST", body: formData }
       );
       const data = await res.json();
-      
+
       if (data.status === 1 || data.status === "1") {
         return { success: true, orderId: data.order_id, orderType };
       } else {
@@ -365,105 +365,86 @@ export default function RestaurantCart() {
     }
   };
 
-  // ✅ FIXED CHECKOUT - BUTTON STAYS DISABLED UNTIL REDIRECT
+  const checkShopStatusBeforePayment = async (): Promise<boolean> => {
+    try {
+      const res = await fetch(
+        "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
+      );
+
+      const data = await res.json();
+
+      if (data.status === "1" && Array.isArray(data.shops)) {
+        const shop = data.shops.find((s: any) => String(s.id) === shopId);
+
+        if (shop) {
+          const isOpen = Number(shop.is_open ?? 0);
+          return isOpen === 1;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Shop status check failed:", error);
+      return false;
+    }
+  };
+
   const handleCheckout = async (e: FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (cartItems.length === 0 || loading || checkoutLoading) return;
+    if (cartItems.length === 0 || checkoutLoading) return;
 
-  setCheckoutLoading(true);
+    setCheckoutLoading(true);
 
-  try {
-    const isShopOpen = await checkShopStatusBeforePayment();
+    try {
+      const isShopOpen = await checkShopStatusBeforePayment();
 
-    if (!isShopOpen) {
-      const redirectUrl = `/restaurant-closed/${shopId}${tableNo ? `?table=${tableNo}` : ''}`;
-      router.replace(redirectUrl);
-      return;
-    }
-
-    const orderResult = await createLiquidityOrder();
-
-    if (orderResult?.success && orderResult.orderId) {
-
-    
-      setRedirecting(true);
-
-      await new Promise(resolve => setTimeout(resolve, 400));
-
-      if (orderResult.orderType === "1") {
-        router.push(`/bar-order-success/${orderResult.orderId}`);
-      } else {
-        router.push(`/table-order-success/${orderResult.orderId}`);
+      if (!isShopOpen) {
+        const redirectUrl = `/restaurant-closed/${shopId}${
+          tableNo ? `?table=${tableNo}` : ""
+        }`;
+        router.replace(redirectUrl);
+        return;
       }
 
-      return;
-    }
+      const orderResult = await createLiquidityOrder();
 
-  } catch (error) {
-    console.error("Checkout error:", error);
-    alert("Order processing failed. Please try again.");
-  } finally {
-    if (!redirecting) {
-      setCheckoutLoading(false);
-    }
-  }
-};
+      if (orderResult?.success && orderResult.orderId) {
+        setRedirecting(true);
 
-// const sendOrderToSquare = async (orderId: string) => {
-//   try {
+        await new Promise((resolve) => setTimeout(resolve, 400));
 
-//     await fetch("/api/send-to-square", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({
-//         order_id: orderResult.orderId,
-//         device_id: deviceId
-//       })
-//     });
+        if (orderResult.orderType === "1") {
+          router.push(`/bar-order-success/${orderResult.orderId}`);
+        } else {
+          router.push(`/table-order-success/${orderResult.orderId}`);
+        }
 
-//   } catch (error) {
-//     console.error("Square ticket failed:", error);
-//   }
-// };
-        
-  // 🆕 NEW: Single check before payment
-const checkShopStatusBeforePayment = async (): Promise<boolean> => {
-  try {
-    const res = await fetch(
-      "https://admin.liquiditybars.com/admin/api/fetchDashboardDataForTempUsers"
-    );
-
-    const data = await res.json();
-
-    if (data.status === "1" && Array.isArray(data.shops)) {
-      const shop = data.shops.find((s: any) => String(s.id) === shopId);
-
-      if (shop) {
-        const isOpen = Number(shop.is_open ?? 0);
-        return isOpen === 1;
+        return;
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      alert("Order processing failed. Please try again.");
+    } finally {
+      if (!redirecting) {
+        setCheckoutLoading(false);
       }
     }
-
-    return false;
-  } catch (error) {
-    console.error("Shop status check failed:", error);
-    return false;
-  }
-};
+  };
 
   const hasTableNumber = !!getLocalStorage("table_number");
   const currentShopId = getShopId();
-  const restaurantLink = hasTableNumber 
+  const restaurantLink = hasTableNumber
     ? `/restaurant/${currentShopId}?table=${tableNo}`
     : `/restaurant/${currentShopId}`;
 
   const handleBack = () => {
     const shopId = getShopId();
-    const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
-    
-    if (shopId && tableNo) {
-      router.push(`/restaurant/${shopId}?table=${tableNo}`);
+    const tableNoLocal =
+      getLocalStorage("table_no") || getLocalStorage("table_number");
+
+    if (shopId && tableNoLocal) {
+      router.push(`/restaurant/${shopId}?table=${tableNoLocal}`);
     } else if (shopId) {
       router.push(`/restaurant/${shopId}`);
     } else {
@@ -471,46 +452,42 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
     }
   };
 
-  
   const handleViewTab = useCallback(() => {
     router.push("/my-table");
   }, [router]);
 
-  // 👇 Show loader until shop status confirmed
   if (checkingShopStatus || shopIsOpen === null) {
     return (
       <div className="flex items-center justify-center min-h-screen p-8">
-        <div className="text-center">
-          {/* <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Checking restaurant status...</p> */}
-        </div>
+        <div className="text-center"></div>
       </div>
     );
   }
 
-  // 👇 Early return if shop closed (safety net)
   if (shopIsOpen === 0) {
-    return null; // Won't reach here due to redirect, but safety
+    return null;
   }
 
   const getSectionTitle = () => {
     const hasTableNumber = !!getLocalStorage("table_number");
-    const currentTableNo = getLocalStorage("table_number") || tableNo;
-    return hasTableNumber && currentTableNo 
-      ? `Today's tab (Table #${currentTableNo})` 
+    const currentTableNo =
+      getLocalStorage("table_number") || tableNo;
+    return hasTableNumber && currentTableNo
+      ? `Today's tab (Table #${currentTableNo})`
       : "Today's Bar Tab";
   };
 
-  const Header = dynamic(() => import("@/components/common/Header/Header"), { ssr: false });
-  const QuantityButton = dynamic(() => import("@/components/common/QuantityButton/QuantityButton"), { ssr: false });
+  const Header = dynamic(
+    () => import("@/components/common/Header/Header"),
+    { ssr: false }
+  );
+  // const QuantityButton = dynamic(
+  //   () => import("@/components/common/QuantityButton/QuantityButton"),
+  //   { ssr: false }
+  // );
 
-  // ✅ BULLETPROOF LOADING STATE
   const isAnyLoading =
-  loading ||
-  checkoutLoading ||
-  orderProcessing ||
-  redirecting ||
-  loadingOrders;
+    checkoutLoading || orderProcessing || redirecting || loadingOrders;
 
   return (
     <>
@@ -528,48 +505,74 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
         </button>
         <div className="pageTitle">{shopName || "Menu"}</div>
         {!loadingOrders ? (
-  matchedOrders.length > 0 ? (
-    <button type="button" className="icon_only" onClick={handleViewTab}>
-      <Receipt size={20} />
-    </button>
-  ) : (
-    <button type="button" className="icon_only"></button>
-  )
-) : (
-  <button type="button" className="icon_only"></button>
-)}
+          matchedOrders.length > 0 ? (
+            <button
+              type="button"
+              className="icon_only"
+              onClick={handleViewTab}
+            >
+              <Receipt size={20} />
+            </button>
+          ) : (
+            <button type="button" className="icon_only"></button>
+          )
+        ) : (
+          <button type="button" className="icon_only"></button>
+        )}
       </header>
 
       <section className="pageWrapper hasHeader hasFooter">
         <div className="pageContainer">
           {/* Cart Items */}
-          {loading ? (
-            <p className="p-4 text-center text-gray-500">Loading cart...</p>
+          {cartLoading ? (
+            <p className="p-4 text-center text-gray-500">
+              Loading cart...
+            </p>
           ) : cartItems.length === 0 ? (
-            <p className="p-4 text-center text-gray-500">Cart is empty</p>
+            <p className="p-4 text-center text-gray-500">
+              Cart is empty
+            </p>
           ) : (
             <>
               {cartItems.map((item) => (
                 <div key={item.id} className={styles.itemCard}>
                   <div className={styles.itemleft}>
-                    <h4>{item.product_name} <span>(1oz)</span></h4>
+                    <h4>
+                      {item.product_name} <span>(1oz)</span>
+                    </h4>
                     {item.choice_of_mixer_name && (
-                      <p><strong>Choice of mixer:</strong> {item.choice_of_mixer_name}</p>
+                      <p>
+                        <strong>Choice of mixer:</strong>{" "}
+                        {item.choice_of_mixer_name}
+                      </p>
                     )}
                     {item.is_double_shot && (
-                      <p><strong>Additional shots:</strong> {item.shot_count}</p>
+                      <p>
+                        <strong>Additional shots:</strong>{" "}
+                        {item.shot_count}
+                      </p>
                     )}
                     {item.special_instruction && (
-                      <p><strong>Special Instruction:</strong> {item.special_instruction}</p>
+                      <p>
+                        <strong>Special Instruction:</strong>{" "}
+                        {item.special_instruction}
+                      </p>
                     )}
                   </div>
                   <div className={styles.itemRight}>
-                    <h4>${(Number(item.price) * Number(item.quantity)).toFixed(2)}</h4>
+                    <h4>
+                      $
+                      {(
+                        Number(item.price) * Number(item.quantity)
+                      ).toFixed(2)}
+                    </h4>
                     <QuantityButton
                       min={0}
                       max={10}
                       initialValue={Number(item.quantity)}
-                      onChange={(val) => updateQuantity(item.id, val)}
+                      onChange={(val: number) =>
+                        updateQuantity(item.id, val)
+                      }
                       onDelete={() => removeItem(item.id)}
                     />
                   </div>
@@ -585,19 +588,26 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
 
           {/* Billing Summary */}
           <div className={styles.billingArea}>
-            <h4 className="text-lg font-semibold mb-4">Billing Summary</h4>
+            <h4 className="text-lg font-semibold mb-4">
+              Billing Summary
+            </h4>
 
-            <h5 className="text-lg font-semibold mb-3">{getSectionTitle()}</h5>
-            
+            <h5 className="text-lg font-semibold mb-3">
+              {getSectionTitle()}
+            </h5>
+
             {loadingOrders ? (
-              <p className="p-2 text-center text-gray-500 text-sm">Loading previous orders...</p>
+              <p className="p-2 text-center text-gray-500 text-sm">
+                Loading previous orders...
+              </p>
             ) : matchedOrders.length === 0 ? (
               <div className="p-4 text-center text-gray-400 text-sm">
                 <p className="italic">
-                  {getLocalStorage("table_number") 
-                    ? `No previous orders for Table #${getLocalStorage("table_number")} today` 
-                    : "No previous bar orders today"
-                  }
+                  {getLocalStorage("table_number")
+                    ? `No previous orders for Table #${getLocalStorage(
+                        "table_number"
+                      )} today`
+                    : "No previous bar orders today"}
                 </p>
               </div>
             ) : (
@@ -605,17 +615,24 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                 {matchedOrders.map((order) => (
                   <div key={order.id}>
                     {order.products.map((product) => (
-                      <div key={product.id} className={styles.billingItem}>
+                      <div
+                        key={product.id}
+                        className={styles.billingItem}
+                      >
                         <div className={styles.itemleft}>
                           <p>
                             {product.product_name}
                             {product.unit && ` (${product.unit})`}
-                            {parseInt(product.quantity || '1') > 1 && ` x${product.quantity}`}
+                            {parseInt(product.quantity || "1") > 1 &&
+                              ` x${product.quantity}`}
                           </p>
                         </div>
                         <div className={styles.itemRight}>
                           <p>
-                            ${(parseFloat(product.price || '0') * parseFloat(product.quantity || '1')).toFixed(2)}
+                            {(
+                              parseFloat(product.price || "0") *
+                              parseFloat(product.quantity || "1")
+                            ).toFixed(2)}
                           </p>
                         </div>
                       </div>
@@ -626,19 +643,34 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
             )}
 
             <h5 className="text-lg font-semibold mb-3">Latest Cart</h5>
-            {loading ? (
-              <p className="p-2 text-center text-gray-500 text-sm">Loading...</p>
+            {cartLoading ? (
+              <p className="p-2 text-center text-gray-500 text-sm">
+                Loading...
+              </p>
             ) : cartItems.length === 0 ? (
-              <p className="p-2 text-center text-gray-500 text-sm">No items</p>
+              <p className="p-2 text-center text-gray-500 text-sm">
+                No items
+              </p>
             ) : (
               <div>
                 {cartItems.map((item) => (
-                  <div key={item.id} className={styles.billingItem}>
+                  <div
+                    key={item.id}
+                    className={styles.billingItem}
+                  >
                     <div className={styles.itemleft}>
-                      <p>{item.product_name} <span className="text-xs">(1oz)</span></p>
+                      <p>
+                        {item.product_name}{" "}
+                        <span className="text-xs">(1oz)</span>
+                      </p>
                     </div>
                     <div className={styles.itemRight}>
-                      <p>${(Number(item.price) * Number(item.quantity)).toFixed(2)}</p>
+                      <p>
+                        $
+                        {(
+                          Number(item.price) * Number(item.quantity)
+                        ).toFixed(2)}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -655,7 +687,7 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
             </div>
           </div>
 
-          {/* ✅ PERFECTED PAY BUTTON - NEVER RE-ENABLES BEFORE REDIRECT */}
+          {/* Pay button */}
           <div className={styles.bottomArea}>
             <form onSubmit={handleCheckout}>
               <button
@@ -667,48 +699,43 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
                     : "bg-primary text-white hover:bg-primary/90 shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5"
                 }`}
               >
-                {/* ✅ FULL LOADING OVERLAY - PERSISTS UNTIL REDIRECT */}
-                <div className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
-                  checkoutLoading ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
-                }`}>
-                  
-                  {/* Processing State */}
+                <div
+                  className={`absolute inset-0 bg-gradient-to-r from-primary/95 via-primary to-primary/95 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-200 ${
+                    checkoutLoading
+                      ? "scale-100 opacity-100"
+                      : "scale-0 opacity-0"
+                  }`}
+                >
                   {orderProcessing && !redirecting && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
-                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
-                      {/* <div className="text-xs mt-1 opacity-90">Please wait</div> */}
                     </div>
                   )}
-                  
-                  {/* Redirecting State */}
+
                   {redirecting && (
                     <div className="text-center text-white px-4">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
-                      {/* <div className="text-sm font-medium">Processing Order...</div> */}
-                      {/* <div className="text-sm font-medium">Redirecting...</div> */}
-                      {/* <div className="text-xs mt-1 opacity-90">Almost there</div> */}
-                      {/* <div className="text-xs mt-1 opacity-90">Please wait</div> */}
                     </div>
                   )}
-                  
-                  {/* Default Loader */}
-                  {checkoutLoading && !orderProcessing && !redirecting && (
-                    <Loader2 className="w-8 h-8 animate-spin text-white" />
-                  )}
+
+                  {checkoutLoading &&
+                    !orderProcessing &&
+                    !redirecting && (
+                      <Loader2 className="w-8 h-8 animate-spin text-white" />
+                    )}
                 </div>
-                
-                {/* Button Text - DEAD DURING LOADING */}
-                <span className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
-                  checkoutLoading ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
-                }`}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-6 h-6 animate-spin mr-2" />                      
-                    </>
+
+                <span
+                  className={`flex items-center justify-center w-full h-full relative z-30 transition-all duration-200 ${
+                    checkoutLoading
+                      ? "opacity-0 scale-95 pointer-events-none"
+                      : "opacity-100 scale-100"
+                  }`}
+                >
+                  {cartLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
                   ) : cartItems.length === 0 ? (
-                    'Empty Cart'
+                    "Empty Cart"
                   ) : (
                     `Place Order $${finalTotalAmount}`
                   )}
@@ -717,10 +744,11 @@ const checkShopStatusBeforePayment = async (): Promise<boolean> => {
             </form>
           </div>
         </div>
-        
+
         <div className={styles.cartFooter}>
           <p>
-            To close your bill, or for any questions regarding<br />
+            To close your bill, or for any questions regarding
+            <br />
             your bill, please speak to your server
           </p>
         </div>

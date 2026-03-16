@@ -12,7 +12,7 @@ interface QuantityButtonProps {
   className?: string;
 }
 
-const QuantityButton: React.FC<QuantityButtonProps> = ({
+const QuantityButtonComponent: React.FC<QuantityButtonProps> = ({
   min = 1,
   max = 99,
   initialValue = 0,
@@ -22,6 +22,7 @@ const QuantityButton: React.FC<QuantityButtonProps> = ({
 }) => {
   const [quantity, setQuantity] = useState<number>(initialValue);
 
+  // Keep local state in sync only when initialValue actually changes
   useEffect(() => {
     setQuantity(initialValue);
   }, [initialValue]);
@@ -46,7 +47,6 @@ const QuantityButton: React.FC<QuantityButtonProps> = ({
       setQuantity(newValue);
       onChange?.(newValue);
     } else if (quantity === 1) {
-      // Remove item completely
       setQuantity(0);
       onDelete?.();
       onChange?.(0);
@@ -61,7 +61,7 @@ const QuantityButton: React.FC<QuantityButtonProps> = ({
     }
   };
 
-  // 🔹 Only show + button when quantity is 0
+  // Only show + button when quantity is 0
   if (quantity === 0) {
     return (
       <button
@@ -73,7 +73,7 @@ const QuantityButton: React.FC<QuantityButtonProps> = ({
     );
   }
 
-  // 🔹 Show full control when quantity > 0
+  // Show full control when quantity > 0
   return (
     <div className={`${styles.quantityBtn} flex items-center ${className}`}>
       {/* Left button: Trash if 1, Minus otherwise */}
@@ -111,4 +111,5 @@ const QuantityButton: React.FC<QuantityButtonProps> = ({
   );
 };
 
-export default QuantityButton;
+// ✅ Memoize to prevent re-renders when parent state (like checkoutLoading) changes
+export default React.memo(QuantityButtonComponent);
