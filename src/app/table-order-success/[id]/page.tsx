@@ -37,7 +37,6 @@ interface Order {
   products?: OrderProduct[];
 }
 
-
 type SquareStatus = "PROPOSED" | "RESERVED" | "PREPARED" | "COMPLETED" | null;
 
 // -----------------------------------------
@@ -99,8 +98,6 @@ export default function OrderSuccess() {
     }
   }, []);
 
-  
-
   const handleBack = useCallback(() => {
     clearPolling();
     if (order?.outlet_slug) {
@@ -133,120 +130,58 @@ export default function OrderSuccess() {
     router.push("/my-table");
   }, [router, clearPolling]);
 
-
   // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
-    const filterOrders = (allOrders: Order[]): Order[] => {
-      const hasTableNumber = !!getLocalStorage("table_number");
-      const currentTableNo = getLocalStorage("table_number") || "";
-      const currentShopId = getShopId();
-      const todayDate = getTodayDate();
-  
-      console.log("🔍 MyTable Filtering:", { 
-        allOrders: allOrders.length, 
-        tableNo: currentTableNo, 
-        hasTableNumber,
-        currentShopId,
-        todayDate
-      });
-  
-      return allOrders.filter((order) => {
-        // ✅ Must match today's date ONLY
-        if (order.order_date !== todayDate) return false;
-  
-        // ✅ Must match shop_id
-        if (currentShopId && order.shop_id !== currentShopId) return false;
-  
-        if (hasTableNumber && currentTableNo) {
-          // Table mode: table_no MATCH + order_type = "2"
-          return order.table_no === currentTableNo && order.order_type === "2";
-        } else {
-          // Bar mode: order_type = "1" ONLY
-          return order.order_type === "1";
-        }
-      });
-    };
+  const filterOrders = (allOrders: Order[]): Order[] => {
+    const hasTableNumber = !!getLocalStorage("table_number");
+    const currentTableNo = getLocalStorage("table_number") || "";
+    const currentShopId = getShopId();
+    const todayDate = getTodayDate();
+    
+    console.log("🔍 MyTable Filtering:", { 
+      allOrders: allOrders.length, 
+      tableNo: currentTableNo, 
+      hasTableNumber,
+      currentShopId,
+      todayDate
+    });
+    
+    return allOrders.filter((order) => {
+      // ✅ Must match today's date ONLY
+      if (order.order_date !== todayDate) return false;
 
-    const lastOrder = filteredOrders[0];
-    console.log(lastOrder?.sqaure_order_id);
-    const lastOrderStatus = lastOrder?.status;
-  
-    useEffect(() => {
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      
-      const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
-      const tableNo = getLocalStorage("table_number") || ""; // ✅ table number from localStorage
-      const todayDate = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+      // ✅ Must match shop_id
+      if (currentShopId && order.shop_id !== currentShopId) return false;
 
-      if (!deviceId) {
-        setLoading(false);
-        return;
+      if (hasTableNumber && currentTableNo) {
+        // Table mode: table_no MATCH + order_type = "2"
+        return order.table_no === currentTableNo && order.order_type === "2";
+      } else {
+        // Bar mode: order_type = "1" ONLY
+        return order.order_type === "1";
       }
-
-      // ✅ Include both todayDate and tableNo in the API path
-      const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        setLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      const list: Order[] = Array.isArray(data) ? data : data.orders || [];
-
-      // Filter client-side for safety (shop_id / order_type)
-      const filteredList = list.filter((order: Order) => {
-        const currentShopId = getShopId();
-        const hasTableNumber = !!tableNo;
-
-        if (currentShopId && order.shop_id !== currentShopId) return false;
-
-        if (hasTableNumber) {
-          return order.table_no === tableNo && order.order_type === "2";
-        } else {
-          return order.order_type === "1";
-        }
-      });
-
-      setOrders(filteredList);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  fetchOrders();
-}, []);
+  // Flatten all products from FILTERED orders only
+  const allProducts: OrderProduct[] = filteredOrders.flatMap((order) => order.products || []);
   
-    // ✅ Filter orders whenever orders or localStorage changes
-    useEffect(() => {
-      const filtered = filterOrders(orders);
-      setFilteredOrders(filtered);
-    }, [orders]);
+  // Grand subtotal across FILTERED orders: sum(price * quantity) for every product
+  const grandSubtotal = allProducts.reduce((sum, product) => {
+    const lineTotal = parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
+    return sum + lineTotal;
+  }, 0);
   
-    // Flatten all products from FILTERED orders only
-    const allProducts: OrderProduct[] = filteredOrders.flatMap((order) => order.products || []);
+  // Sum all tax_amount from FILTERED orders (API field) or calculate 13% of subtotal
+  const grandTax = filteredOrders.reduce((sum, order) => {
+    if (order.tax_amount) {
+      return sum + parseFloat(order.tax_amount || "0");
+    }
+    // Fallback: 13% tax rate if no tax_amount provided
+    return sum + grandSubtotal * 0.13;
+  }, 0);
   
-    // Grand subtotal across FILTERED orders: sum(price * quantity) for every product
-    const grandSubtotal = allProducts.reduce((sum, product) => {
-      const lineTotal = parseFloat(product.price || "0") * parseFloat(product.quantity || "0");
-      return sum + lineTotal;
-    }, 0);
-  
-    // Sum all tax_amount from FILTERED orders (API field) or calculate 13% of subtotal
-    const grandTax = filteredOrders.reduce((sum, order) => {
-      if (order.tax_amount) {
-        return sum + parseFloat(order.tax_amount || "0");
-      }
-      // Fallback: 13% tax rate if no tax_amount provided
-      return sum + grandSubtotal * 0.13;
-    }, 0);
-  
-    // Grand total = subtotal + tax
-    const grandTotal = grandSubtotal + grandTax;
+  // Grand total = subtotal + tax
+  const grandTotal = grandSubtotal + grandTax;
 
   // -----------------------------
   // API HELPERS
@@ -307,6 +242,30 @@ export default function OrderSuccess() {
     []
   );
 
+  const fetchOrders = useCallback(async () => {
+    try {
+      const deviceId = getLocalStorage("device_id") || getLocalStorage("deviceId");
+      const tableNo = getLocalStorage("table_number") || "";
+      const todayDate = getTodayDate();
+
+      if (!deviceId) return;
+
+      const url = `https://admin.liquiditybars.com/admin/api/tblOrderList/${deviceId}/${todayDate}/${tableNo}`;
+      const res = await fetch(url);
+      
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const list: Order[] = Array.isArray(data) ? data : data.orders || [];
+      
+      // Filter immediately
+      const filteredList = filterOrders(list);
+      setOrders(filteredList);
+    } catch (e) {
+      console.error("fetchOrders error:", e);
+    }
+  }, []);
+
   const handleCancel = () => setShowConfirmModal(false);
 
   const handleConfirm = async () => {
@@ -327,7 +286,6 @@ export default function OrderSuccess() {
       const data = await res.json();
 
       if (data.success) {
-        //router.push(`/bill/${data.square_order_id}`);
         router.push(`/bill-success/${data.square_order_id}`);
       } else {
         alert(data.message);
@@ -338,69 +296,97 @@ export default function OrderSuccess() {
     }
   };
 
-  // -----------------------------
-  // EFFECT: INITIAL LOAD + POLLING
-  // -----------------------------
+  // ✅ MAIN EFFECT: INITIAL LOAD + POLLING (CONSOLIDATED)
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setError("No order ID provided");
+      setLoading(false);
+      return;
+    }
 
     let mounted = true;
 
-    const run = async () => {
-      const orderData = await fetchOrderDetails();
-
-      if (!mounted) return;
-
-      if (!orderData) {
-        setError("Order not found or deleted.");
-        setOrder(null);
-        setLoading(false);
-        return;
-      }
-
+    const initialize = async () => {
+      setLoading(true);
       setError(null);
-      setOrder(orderData);
 
-      if (!orderData.sqaure_order_id) {
-        setSquareStatus(null);
-        setLoading(false);
-        return;
+      try {
+        // 1. Fetch specific order details FIRST (critical for this page)
+        const orderData = await fetchOrderDetails();
+        
+        if (!mounted) return;
+
+        if (!orderData) {
+          setError("Order not found or deleted.");
+          setOrder(null);
+          setLoading(false);
+          return;
+        }
+
+        setOrder(orderData);
+
+        // 2. Fetch orders list in parallel
+        await fetchOrders();
+
+        // 3. Check Square status if available
+        if (orderData.sqaure_order_id) {
+          const sq = await fetchSquareStatus(orderData.sqaure_order_id);
+          if (mounted) {
+            setSquareStatus(sq);
+            
+            // Update order status based on Square
+            if (sq === "RESERVED") {
+              const updated = { ...orderData, status: "2", is_ready: "0" };
+              setOrder(updated);
+            } else if (sq === "PREPARED" || sq === "COMPLETED") {
+              const updated = { ...orderData, status: "2", is_ready: "1" };
+              setOrder(updated);
+            }
+          }
+        }
+
+      } catch (e) {
+        console.error("Initialization error:", e);
+        if (mounted) {
+          setError("Failed to load order details.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
+    };
 
-      const sq = await fetchSquareStatus(orderData.sqaure_order_id);
+    initialize();
 
+    // Start polling after initial load
+    intervalRef.current = setInterval(async () => {
+      if (!mounted || !order?.sqaure_order_id) return;
+      
+      const sq = await fetchSquareStatus(order.sqaure_order_id);
       if (!mounted) return;
 
       setSquareStatus(sq);
-
-      if (sq === "RESERVED") {
-        const updated = { ...orderData, status: "2", is_ready: "0" };
-        setOrder(updated);
-      } else if (sq === "PREPARED") {
-        const updated = { ...orderData, status: "2", is_ready: "1" };
-        setOrder(updated);
-      } else if (sq === "COMPLETED") {
-        const updated = { ...orderData, status: "2", is_ready: "1" };
-        setOrder(updated);
-        // ✅ Stay on page - show "Your Order Has Been Collected" message
-        clearPolling(); // Stop polling when completed
+      
+      if (sq === "COMPLETED") {
+        clearPolling();
       }
-
-      setLoading(false);
-    };
-
-    setLoading(true);
-    run();
-
-    if (!intervalRef.current) {
-      intervalRef.current = setInterval(run, 10000);
-    }
+    }, 10000);
 
     return () => {
       mounted = false;
       clearPolling();
     };
-  }, [id, fetchOrderDetails, fetchSquareStatus, clearPolling, router]);
+  }, [id, fetchOrderDetails, fetchSquareStatus, fetchOrders]);
+
+  // ✅ Filter orders whenever orders change
+  useEffect(() => {
+    const filtered = filterOrders(orders);
+    setFilteredOrders(filtered);
+  }, [orders]);
+
+  const lastOrder = filteredOrders[0];
+  const lastOrderStatus = lastOrder?.status;
 
   // -----------------------------
   // RENDER
@@ -409,19 +395,28 @@ export default function OrderSuccess() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          {/* <p className="text-center mt-10">Loading order...</p> */}
+          <div className="text-center mt-10">
+            {/* <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-lg">Loading order details...</p> */}
+          </div>
         </div>
       </section>
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          <h2 className="text-center mt-10 text-red-500">
+          <h2 className="text-center mt-10 text-red-500 text-xl font-bold">
             {error || "Order not found or deleted."}
           </h2>
+          <button 
+            onClick={handleBack}
+            className="mt-6 px-6 py-3 rounded-lg w-full text-white bg-primary transition-all hover:bg-primary/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-medium"
+          >
+            Go Back
+          </button>
         </div>
       </section>
     );
@@ -461,55 +456,57 @@ export default function OrderSuccess() {
             >
               View Tab
             </button>
-             {filteredOrders.length > 0 && lastOrderStatus !== "5" && (
-  <button
-    onClick={() => setShowConfirmModal(true)}
-    className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-  >
-    Get My Bill
-  </button>
-)}
+            
+            {filteredOrders.length > 0 && lastOrderStatus !== "5" && (
+              <button
+                onClick={() => setShowConfirmModal(true)}
+                className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-black transition-all hover:bg-black/90 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                Get My Bill
+              </button>
+            )}
           </div>
         </div>
+        
         {showConfirmModal && (
-        <div
-          className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4"
-          onClick={handleCancel}
-        >
           <div
-            className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4"
+            onClick={handleCancel}
           >
-            <div className="flex items-center flex-col gap-3 mb-3">
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+            <div
+              className="bg-white rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center flex-col gap-3 mb-3">
+                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-xl font-bold text-gray-900">Get My Bill</h3>
+                  <p className="text-sm text-gray-500">
+                    Warning: Once you request your bill, you cannot place any more orders. Are you sure you want to do this?
+                  </p>
+                </div>
               </div>
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-gray-900">Get My Bill</h3>
-                <p className="text-sm text-gray-500">
-                  Warning: Once you request your bill, you cannot place any more orders. Are you sure you want to do this?
-                </p>
-              </div>
-            </div>
 
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={handleCancel}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-              >
-                <X size={18} />
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirm}
-                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                Get Bill
-              </button>
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleCancel}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <X size={18} />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  Get Bill
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </section>
     </>
   );
