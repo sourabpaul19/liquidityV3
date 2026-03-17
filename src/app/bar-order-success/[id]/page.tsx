@@ -226,7 +226,7 @@ export default function OrderSuccess() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          <p className="text-center mt-10">Loading order...</p>
+          {/* <p className="text-center mt-10">Loading order...</p> */}
         </div>
       </section>
     );
@@ -236,7 +236,7 @@ export default function OrderSuccess() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          <p className="text-center mt-10">Redirecting...</p>
+          {/* <p className="text-center mt-10">Redirecting...</p> */}
         </div>
       </section>
     );

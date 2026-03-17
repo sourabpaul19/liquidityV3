@@ -826,6 +826,49 @@ export default function Restaurant() {
   }
 }, [matchedOrders, router]);
 
+const checkSquareOrderStatus = useCallback(async (squareOrderId: string) => {
+  try {
+    const res = await fetch(
+      `https://admin.liquiditybars.com/admin/api/getSquareOrderStatus/${squareOrderId}`
+    );
+    const data = await res.json();
+
+    return data; // adjust based on API response
+  } catch (err) {
+    console.error("Square status error:", err);
+    return null;
+  }
+}, []);
+
+useEffect(() => {
+  if (!matchedOrders || matchedOrders.length === 0) return;
+
+  const latestOrder = matchedOrders[0];
+
+  if (!latestOrder?.sqaure_order_id) return;
+
+  const interval = setInterval(async () => {
+    const statusRes = await checkSquareOrderStatus(
+      latestOrder.sqaure_order_id
+    );
+
+    if (!statusRes) return;
+
+    console.log("Square Status:", statusRes);
+
+    // 🔥 Example condition (adjust based on API)
+    if (statusRes.status === "COMPLETED") {
+      // Optionally refresh orders
+      fetchOrders();
+
+      // Or redirect immediately
+      //router.push(`/bill-success/${latestOrder.sqaure_order_id}`);
+    }
+  }, 10000); // 10 seconds
+
+  return () => clearInterval(interval); // cleanup
+}, [matchedOrders, checkSquareOrderStatus, fetchOrders, router]);
+
 
   useEffect(() => {
     const onScroll = () => {

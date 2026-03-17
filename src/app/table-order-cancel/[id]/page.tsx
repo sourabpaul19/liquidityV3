@@ -6,8 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { EllipsisVertical, ClockFading } from "lucide-react";
 import BottomNavigation from "@/components/common/BottomNavigation/BottomNavigation";
-import styles from "../bar-order-status.module.scss";
-import statusImg from "../../../../public/images/bar-status.png";
+import styles from "../table-order-cancel.module.scss";
+import statusImg from "../../../../public/images/cancel.png";
 
 // -----------------------------------------
 // TYPES
@@ -53,7 +53,7 @@ const getStatusMessage = (status: SquareStatus) => {
 // -----------------------------------------
 // COMPONENT
 // -----------------------------------------
-export default function OrderSuccess() {
+export default function OrderCancel() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
@@ -235,7 +235,7 @@ export default function OrderSuccess() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          {/* <p className="text-center mt-10">Loading order...</p> */}
+          <p className="text-center mt-10">Loading order...</p>
         </div>
       </section>
     );
@@ -268,7 +268,7 @@ export default function OrderSuccess() {
             </h4>
 
             <p className="text-center">
-              Can't find your order? Please speak to<br/>the bartender and show them your<br/>receipt.
+              <strong>Reason:</strong> One or more ingredients<br/>missing. You will not be charged for<br/>your order.
             </p>
 
             <button 
@@ -279,13 +279,13 @@ export default function OrderSuccess() {
               Order Again
             </button>
 
-            <button 
+            {/* <button 
               type="button"
               onClick={handleViewTab}
               className="mt-3 px-6 py-3 rounded-lg w-full text-white bg-gray-600 hover:bg-gray-700 transition-all hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               Receipt
-            </button>
+            </button> */}
           </div>
         </div>
       </section>
