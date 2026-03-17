@@ -235,7 +235,6 @@ export default function OrderCancel() {
     return (
       <section className="pageWrapper hasHeader">
         <div className="pageContainer">
-          <p className="text-center mt-10">Loading order...</p>
         </div>
       </section>
     );
