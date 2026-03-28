@@ -84,11 +84,9 @@ export default function MyTable() {
       alert("Something went wrong while merging orders.");
     }
   };
-
   const handleBack = () => {
     router.back();
   };
-
   const handleOrderAnother = () => {
     const shopId = getShopId();
     const tableNo = getLocalStorage("table_no") || getLocalStorage("table_number");
@@ -101,7 +99,6 @@ export default function MyTable() {
       router.push("/restaurant");
     }
   };
-
   // ✅ Filter orders by shop_id, table, order_type, AND TODAY'S DATE ONLY
   const filterOrders = (allOrders: Order[]): Order[] => {
     const hasTableNumber = !!getLocalStorage("table_number");
